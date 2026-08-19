@@ -1,0 +1,29 @@
+.env
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Regenerable or externally hosted benchmark assets.
+downloads/**
+runs/**
+data/*.jsonl
+data/*.json
+data/*.txt
+
+# Keep documentation/manifest files inside ignored data folders.
+!downloads/README.md
+!runs/README.md
+!data/README.md
+
+# `results/` is intentionally versionable for selected, curated evidence.
+
+.vscode/
