@@ -32,6 +32,7 @@ class ToolDefinition:
     parameters: dict[str, Any] = field(default_factory=dict)
     required: list[str] = field(default_factory=list)
     argument_aliases: dict[str, str] = field(default_factory=dict)
+    legacy: bool = False
     function: Callable[..., Any] | None = None
 
     @property
@@ -76,6 +77,7 @@ def tool(
     description: str,
     parameters: dict[str, Any] | None = None,
     required: list[str] | None = None,
+    legacy: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Attach ANA metadata to a function and register it as a tool.
 
@@ -95,6 +97,7 @@ def tool(
             parameters=parameters if parameters is not None else inferred_parameters,
             required=required if required is not None else inferred_required,
             argument_aliases=getattr(func, "__tool_argument_aliases__", {}),
+            legacy=legacy,
             function=func,
         )
         func.__tool__ = definition
@@ -108,15 +111,17 @@ def registered_tools() -> dict[str, ToolDefinition]:
     return dict(_TOOL_REGISTRY)
 
 
-def registered_tool_specs() -> list[dict[str, Any]]:
-    return [definition.to_native_tool_spec() for definition in _TOOL_REGISTRY.values()]
+def registered_tool_specs(*, include_legacy: bool = False) -> list[dict[str, Any]]:
+    return [
+        definition.to_native_tool_spec()
+        for definition in _TOOL_REGISTRY.values()
+        if include_legacy or not definition.legacy
+    ]
 
 
 def call_registered_tool(backend: Any, name: str, args: dict[str, Any]) -> dict[str, Any] | None:
     definition = _TOOL_REGISTRY.get(name)
     if definition is None or definition.function is None:
-        return None
-    if any(required_name not in args for required_name in definition.required):
         return None
     signature = inspect.signature(definition.function)
     accepted_parameters = {
@@ -140,7 +145,7 @@ def call_registered_tool(backend: Any, name: str, args: dict[str, Any]) -> dict[
 
 
 def registered_tool_contracts(status: ToolStatus | None = None) -> list[dict[str, str]]:
-    definitions = _TOOL_REGISTRY.values()
+    definitions = [definition for definition in _TOOL_REGISTRY.values() if not definition.legacy]
     if status is not None:
         definitions = [definition for definition in definitions if definition.status == status]
     return [definition.to_contract_dict() for definition in definitions]

@@ -72,7 +72,7 @@ def tool_handle_recap(
     status=ToolStatus.CORE,
     profile=ToolProfile.READONLY,
     purpose="Drafts a schema-grounded, dataset-agnostic tool plan for the user question.",
-    description="Drafts a schema-grounded, dataset-agnostic tool plan for the user question. Use this after schema_inspect and before executing graph data tools on non-trivial questions. It identifies likely answer shape, query features such as OR/AND/grouping/comparison, relevant schema labels/properties/relationship types, recommended tool families, and planning risks. It does not execute the query.",
+    description="Drafts a schema-grounded, dataset-agnostic tool plan for the user question. Use this after schema_overview or targeted schema tools and before executing graph data tools on non-trivial questions. It identifies likely answer shape, query features such as OR/AND/grouping/comparison, relevant schema labels/properties/relationship types, recommended tool families, and planning risks. It does not execute the query.",
 )
 def tool_draft_tool_plan(
     backend,
@@ -207,7 +207,12 @@ def tool_entity_resolve(
 )
 def tool_node_search(
     backend,
-    label: Annotated[Any, ToolParam("Node label from schema_inspect.", schema={"type": "string"})],
+    label: Annotated[
+        Any,
+        ToolParam(
+            "Node label from schema_overview or targeted schema tools.", schema={"type": "string"}
+        ),
+    ],
     value: Annotated[Any, ToolParam("Exact value to match, e.g. a company or person name.")],
     property: Annotated[
         Any,
@@ -376,7 +381,11 @@ def tool_expand(
         ToolParam("Source variable inside the handle, e.g. 'company'.", schema={"type": "string"}),
     ],
     relationship_type: Annotated[
-        Any, ToolParam("Relationship type exactly from schema_inspect.", schema={"type": "string"})
+        Any,
+        ToolParam(
+            "Relationship type exactly from schema_overview or targeted schema tools.",
+            schema={"type": "string"},
+        ),
     ],
     direction: Annotated[
         Any,
@@ -454,7 +463,11 @@ def tool_expand_aggregate(
     from_: Annotated[Any, ToolParam("Source handle id.", alias="from", schema={"type": "string"})],
     source: Annotated[Any, ToolParam("Source variable in the handle.", schema={"type": "string"})],
     relationship_type: Annotated[
-        Any, ToolParam("Relationship type from schema_inspect.", schema={"type": "string"})
+        Any,
+        ToolParam(
+            "Relationship type from schema_overview or targeted schema tools.",
+            schema={"type": "string"},
+        ),
     ],
     direction: Annotated[
         Any,
@@ -581,7 +594,11 @@ def tool_optional_expand_count(
         ),
     ],
     relationship_type: Annotated[
-        Any, ToolParam("Relationship type from schema_inspect.", schema={"type": "string"})
+        Any,
+        ToolParam(
+            "Relationship type from schema_overview or targeted schema tools.",
+            schema={"type": "string"},
+        ),
     ],
     direction: Annotated[
         Any,
@@ -689,14 +706,14 @@ def tool_optional_count_by_pattern(
     start_label: Annotated[
         Any,
         ToolParam(
-            "Label of the starting node, e.g. 'Company'. Must exist in schema_inspect.",
+            "Label of the starting node, e.g. 'Company'. Must exist in schema_overview or targeted schema tools.",
             schema={"type": "string"},
         ),
     ],
     hops: Annotated[
         Any,
         ToolParam(
-            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_inspect to choose direction.",
+            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_overview or targeted schema tools to choose direction.",
             required=True,
             schema={
                 "type": "array",
@@ -705,7 +722,7 @@ def tool_optional_count_by_pattern(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type exactly as shown in schema_inspect, e.g. 'hasCEO', 'subsidiaryOf'.",
+                            "description": "Relationship type exactly as shown in schema_overview or targeted schema tools, e.g. 'hasCEO', 'subsidiaryOf'.",
                         },
                         "direction": {
                             "type": "string",
@@ -777,7 +794,7 @@ def tool_optional_count_by_pattern(
                 "properties": {
                     "relationship_type": {
                         "type": "string",
-                        "description": "Relationship type from schema_inspect, e.g. 'hasBoardMember'.",
+                        "description": "Relationship type from schema_overview or targeted schema tools, e.g. 'hasBoardMember'.",
                     },
                     "direction": {
                         "type": "string",
@@ -905,7 +922,7 @@ def tool_optional_count_by_pattern(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -1139,7 +1156,11 @@ def tool_relationship_query(
         Any, ToolParam("Source label in the relationship pattern.", schema={"type": "string"})
     ],
     relationship_type: Annotated[
-        Any, ToolParam("Relationship type from schema_inspect.", schema={"type": "string"})
+        Any,
+        ToolParam(
+            "Relationship type from schema_overview or targeted schema tools.",
+            schema={"type": "string"},
+        ),
     ],
     target_label: Annotated[
         Any, ToolParam("Target label in the relationship pattern.", schema={"type": "string"})
@@ -1192,7 +1213,7 @@ def tool_relationship_query(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -1419,15 +1440,15 @@ def tool_multi_hop_query(
     start_label: Annotated[
         Any,
         ToolParam(
-            "Label of the starting node, e.g. 'Company'. Must exist in schema_inspect.",
+            "Label of the starting node, e.g. 'Company'. Must exist in schema_overview or targeted schema tools.",
             schema={"type": "string"},
         ),
     ],
     hops: Annotated[
         Any,
         ToolParam(
-            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_inspect to choose direction.",
-            required=False,
+            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_overview or targeted schema tools to choose direction.",
+            required=True,
             schema={
                 "type": "array",
                 "items": {
@@ -1435,7 +1456,7 @@ def tool_multi_hop_query(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type exactly as shown in schema_inspect, e.g. 'hasCEO', 'subsidiaryOf'.",
+                            "description": "Relationship type exactly as shown in schema_overview or targeted schema tools, e.g. 'hasCEO', 'subsidiaryOf'.",
                         },
                         "direction": {
                             "type": "string",
@@ -1530,7 +1551,7 @@ def tool_multi_hop_query(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -1778,15 +1799,15 @@ def tool_pattern_query(
     start_label: Annotated[
         Any,
         ToolParam(
-            "Label of the starting node, e.g. 'Company'. Must exist in schema_inspect.",
+            "Label of the starting node, e.g. 'Company'. Must exist in schema_overview or targeted schema tools.",
             schema={"type": "string"},
         ),
     ],
     hops: Annotated[
         Any,
         ToolParam(
-            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_inspect to choose direction.",
-            required=False,
+            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_overview or targeted schema tools to choose direction.",
+            required=True,
             schema={
                 "type": "array",
                 "items": {
@@ -1794,7 +1815,7 @@ def tool_pattern_query(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type exactly as shown in schema_inspect, e.g. 'hasCEO', 'subsidiaryOf'.",
+                            "description": "Relationship type exactly as shown in schema_overview or targeted schema tools, e.g. 'hasCEO', 'subsidiaryOf'.",
                         },
                         "direction": {
                             "type": "string",
@@ -1889,7 +1910,7 @@ def tool_pattern_query(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -2137,7 +2158,7 @@ def tool_top_entities_by_property(
     start_label: Annotated[
         Any,
         ToolParam(
-            "Label of the starting node, e.g. 'Company'. Must exist in schema_inspect.",
+            "Label of the starting node, e.g. 'Company'. Must exist in schema_overview or targeted schema tools.",
             schema={"type": "string"},
         ),
     ],
@@ -2181,7 +2202,7 @@ def tool_top_entities_by_property(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -2221,7 +2242,7 @@ def tool_top_entities_by_property(
     hops: Annotated[
         Any,
         ToolParam(
-            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_inspect to choose direction.",
+            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_overview or targeted schema tools to choose direction.",
             required=False,
             schema={
                 "type": "array",
@@ -2230,7 +2251,7 @@ def tool_top_entities_by_property(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type exactly as shown in schema_inspect, e.g. 'hasCEO', 'subsidiaryOf'.",
+                            "description": "Relationship type exactly as shown in schema_overview or targeted schema tools, e.g. 'hasCEO', 'subsidiaryOf'.",
                         },
                         "direction": {
                             "type": "string",
@@ -2547,7 +2568,7 @@ def tool_top_entities_by_property(
     status=ToolStatus.EXPERIMENTAL,
     profile=ToolProfile.READONLY,
     purpose="Finds nodes of one label that satisfy simple AND constraints over one-hop relationships and related-node properties.",
-    description="Finds nodes of one label that satisfy simple AND constraints over one-hop relationships and related-node properties. Use this for questions like 'companies based in Italy and with Tim Cook as a board member' or 'companies whose CEO is Elon Musk'. This tool is deliberately small: use it immediately after schema_inspect when all constraints apply to the same candidate node. Prefer it over entity_resolve + expand + project/count for these one-hop AND cases. If the answer is a candidate node and the question says it is related to named/category nodes A and B, put both as separate where items with property='name' filters instead of resolving A and B into handles first. Do NOT use for OR/NOT logic, grouped counts, multi-hop paths, or constraints that require comparing two separate candidate sets. When the user asks for the candidate name plus candidate properties such as launch_year or inception_date, keep return_mode='names' and add those fields in return_properties. Do NOT use when two or more relationship constraints from the same candidate should point to the same related target label (for example CEO and founder of the same company); use same_target_role_intersection instead.",
+    description="Finds nodes of one label that satisfy simple AND constraints over one-hop relationships and related-node properties. Use this for questions like 'companies based in Italy and with Tim Cook as a board member' or 'companies whose CEO is Elon Musk'. This tool is deliberately small: use it immediately after schema_overview or targeted schema tools when all constraints apply to the same candidate node. Prefer it over entity_resolve + expand + project/count for these one-hop AND cases. If the answer is a candidate node and the question says it is related to named/category nodes A and B, put both as separate where items with property='name' filters instead of resolving A and B into handles first. Do NOT use for OR/NOT logic, grouped counts, multi-hop paths, or constraints that require comparing two separate candidate sets. When the user asks for the candidate name plus candidate properties such as launch_year or inception_date, keep return_mode='names' and add those fields in return_properties. Do NOT use when two or more relationship constraints from the same candidate should point to the same related target label (for example CEO and founder of the same company); use same_target_role_intersection instead.",
 )
 def tool_constraint_query(
     backend,
@@ -2583,7 +2604,7 @@ def tool_constraint_query(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type exactly from schema_inspect, e.g. 'hasCEO'.",
+                            "description": "Relationship type exactly from schema_overview or targeted schema tools, e.g. 'hasCEO'.",
                         },
                         "direction": {
                             "type": "string",
@@ -2761,24 +2782,25 @@ def tool_constraint_query(
 
 @tool(
     name="group_count_by_pattern",
-    status=ToolStatus.DEPRECATED,
+    status=ToolStatus.EXPERIMENTAL,
     profile=ToolProfile.READONLY,
     purpose="Answers grouped aggregate graph questions in one server-side call.",
     description="Answers grouped aggregate graph questions in one server-side call. Use when the user asks 'for each X, how many Y', 'number of Y by X', or asks to rank groups by counts. Do NOT materialize rows and then aggregate manually unless this tool cannot express the pattern. Use relationship names only as hops, never as filter properties. If the grouped count is one branch of an OR/AND question, first produce compatible entity handles for each branch, combine them, then count/project the combined handle.",
+    legacy=True,
 )
 def tool_group_count_by_pattern(
     backend,
     start_label: Annotated[
         Any,
         ToolParam(
-            "Label of the starting node, e.g. 'Company'. Must exist in schema_inspect.",
+            "Label of the starting node, e.g. 'Company'. Must exist in schema_overview or targeted schema tools.",
             schema={"type": "string"},
         ),
     ],
     hops: Annotated[
         Any,
         ToolParam(
-            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_inspect to choose direction.",
+            "Ordered traversal hops. Each hop starts from the previous variable. Use schema_overview or targeted schema tools to choose direction.",
             schema={
                 "type": "array",
                 "items": {
@@ -2786,7 +2808,7 @@ def tool_group_count_by_pattern(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type exactly as shown in schema_inspect, e.g. 'hasCEO', 'subsidiaryOf'.",
+                            "description": "Relationship type exactly as shown in schema_overview or targeted schema tools, e.g. 'hasCEO', 'subsidiaryOf'.",
                         },
                         "direction": {
                             "type": "string",
@@ -2917,7 +2939,7 @@ def tool_group_count_by_pattern(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -3208,10 +3230,11 @@ def tool_entity_set_operation(
 
 @tool(
     name="set_count_by_patterns",
-    status=ToolStatus.DEPRECATED,
+    status=ToolStatus.EXPERIMENTAL,
     profile=ToolProfile.READONLY,
     purpose="Counts distinct entities satisfying a set operation over multiple server-side graph patterns without materializing branch handles.",
     description="Counts distinct entities satisfying a set operation over multiple server-side graph patterns without materializing branch handles. Use this for 'how many X either/or ...' when one branch may be very large, e.g. many companies in a country OR companies matching another condition. For OR/either use op='union'. Do NOT use expand + entity_set_operation + count_handle for broad count questions because large branches can be capped before counting. Each branch must return the same answer entity type through return_var.",
+    legacy=True,
 )
 def tool_set_count_by_patterns(
     backend,
@@ -3226,7 +3249,7 @@ def tool_set_count_by_patterns(
                     "properties": {
                         "start_label": {
                             "type": "string",
-                            "description": "Label of the starting node, e.g. 'Company'. Must exist in schema_inspect.",
+                            "description": "Label of the starting node, e.g. 'Company'. Must exist in schema_overview or targeted schema tools.",
                         },
                         "start_as": {
                             "type": "string",
@@ -3248,7 +3271,7 @@ def tool_set_count_by_patterns(
                                     },
                                     "property": {
                                         "type": "string",
-                                        "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                                        "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                                     },
                                     "op": {
                                         "type": "string",
@@ -3285,13 +3308,13 @@ def tool_set_count_by_patterns(
                         },
                         "hops": {
                             "type": "array",
-                            "description": "Ordered traversal hops. Each hop starts from the previous variable. Use schema_inspect to choose direction.",
+                            "description": "Ordered traversal hops. Each hop starts from the previous variable. Use schema_overview or targeted schema tools to choose direction.",
                             "items": {
                                 "type": "object",
                                 "properties": {
                                     "relationship_type": {
                                         "type": "string",
-                                        "description": "Relationship type exactly as shown in schema_inspect, e.g. 'hasCEO', 'subsidiaryOf'.",
+                                        "description": "Relationship type exactly as shown in schema_overview or targeted schema tools, e.g. 'hasCEO', 'subsidiaryOf'.",
                                     },
                                     "direction": {
                                         "type": "string",
@@ -3695,7 +3718,7 @@ def tool_same_target_role_intersection(
                     "properties": {
                         "relationship_type": {
                             "type": "string",
-                            "description": "Relationship type from schema_inspect.",
+                            "description": "Relationship type from schema_overview or targeted schema tools.",
                         },
                         "direction": {
                             "type": "string",
@@ -3741,7 +3764,7 @@ def tool_same_target_role_intersection(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -3989,7 +4012,7 @@ def tool_shared_role_aggregate(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -4056,7 +4079,7 @@ def tool_shared_role_aggregate(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -4109,7 +4132,7 @@ def tool_shared_role_aggregate(
                         },
                         "property": {
                             "type": "string",
-                            "description": "Property name from schema_inspect, e.g. 'name', 'launch_year', 'date_of_birth'.",
+                            "description": "Property name from schema_overview or targeted schema tools, e.g. 'name', 'launch_year', 'date_of_birth'.",
                         },
                         "op": {
                             "type": "string",
@@ -4482,6 +4505,7 @@ def tool_group_handle(
     profile=ToolProfile.READONLY,
     purpose="Legacy alias for group_handle.",
     description="Legacy alias for group_handle. Groups existing handle rows and computes aggregate metrics. Prefer calling group_handle in new plans.",
+    legacy=True,
 )
 def tool_aggregate(
     backend,

@@ -50,8 +50,8 @@ def _repo_root() -> Path:
 
 def _load_current_research_backend() -> Any:
     """Load the current packaged Neo4j ANA backend."""
-    from agent_native_graph.backends.neo4j.backend import introspect_schema
-    from agent_native_graph.tools.backend import AgentToolBackend
+    from agent_native_graph.backends.neo4j.backend import Neo4jGraphBackend
+    from agent_native_graph.backends.neo4j.introspection import introspect_schema
 
     uri = os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
     user = os.getenv("NEO4J_USER", "neo4j")
@@ -74,7 +74,7 @@ def _load_current_research_backend() -> Any:
             password,
             query_timeout_s=query_timeout_s,
         )
-    return AgentToolBackend(
+    return Neo4jGraphBackend(
         uri,
         user,
         password,
@@ -109,10 +109,8 @@ def create_app() -> Any:
 
     @app.get("/tools")
     def tools(status: str | None = None) -> dict[str, Any]:
-        if status not in {None, "core", "experimental", "deprecated"}:
-            raise HTTPException(
-                status_code=400, detail="status must be core, experimental, or deprecated"
-            )
+        if status not in {None, "core", "experimental"}:
+            raise HTTPException(status_code=400, detail="status must be core or experimental")
         return {"version": "ana-v0", "tools": get_tool_contract(status)}
 
     @app.post("/tools/call")

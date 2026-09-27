@@ -22,8 +22,8 @@ DOCKER_IMAGE ?= agent-native-graph
 help:
 	@echo "Agent-Native Graph targets"
 	@echo ""
-	@echo "  make sync                Alias for make install"
-	@echo "  make install             Install uv dependencies with dev and service extras"
+	@echo "  make sync             Alias for make install"
+	@echo "  make install          Install uv dependencies with dev and service extras"
 	@echo "  make format           Format Python code with ruff"
 	@echo "  make lint             Check Python code with ruff"
 	@echo "  make test             Run all current unit tests"

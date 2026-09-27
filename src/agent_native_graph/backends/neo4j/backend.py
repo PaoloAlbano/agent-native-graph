@@ -1,86 +1,32 @@
-import argparse
 import json
 import re
-import signal
-import sys
-import time
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from neo4j import GraphDatabase, Query
 from neo4j.exceptions import Neo4jError
 from neo4j.graph import Node, Relationship
 
-from agent_native_graph.domain.handles import Handle
-from agent_native_graph.research_common import (
-    ChatClient,
-    add_llm_args,
-    add_neo4j_args,
-    append_jsonl,
-    completed_qids,
-    limited_tasks,
-    normalize_answer_rows,
-    parse_answer_json,
-    read_jsonl,
-    result_matches_answer,
+from agent_native_graph.application.agent_loop import (
+    _evaluation_fetch_all_pages,
+    _guarded_action,
+    _latest_fetchable_handle,
+    _next_action,
 )
-
-
-class TaskTimeoutError(TimeoutError):
-    pass
-
-
-LIST_ARG_KEYS = {
-    "where",
-    "filters",
-    "hops",
-    "select",
-    "group_by",
-    "metrics",
-    "order_by",
-    "relationships",
-    "operands",
-}
-
-
-def _json_system_prompt(*, enable_planning_tools: bool, schema_entry: str) -> str:
-    """Build JSON-mode tool guidance from the same decorator specs used by native calls."""
-    tool_lines = []
-    for spec in _tool_specs(
-        enable_planning_tools=enable_planning_tools,
-        schema_entry=schema_entry,
-    ):
-        function = spec["function"]
-        tool_lines.append(
-            {
-                "name": function["name"],
-                "description": function["description"],
-                "parameters": function["parameters"],
-            }
-        )
-    return (
-        "You are an agent using graph tools. Do not write Cypher.\n"
-        "You must answer by composing tool calls over server-side handles.\n"
-        "Every response must be a single JSON object with shape "
-        '{"tool":"<tool_name>","args":{...}}.\n'
-        "Call exactly one tool at a time. Use fetch only when the answer handle is ready.\n"
-        "Available tools are generated from the current tool registry:\n"
-        f"{json.dumps(tool_lines, ensure_ascii=False)}"
-    )
-
-
+from agent_native_graph.application.neo4j_benchmark import TaskTimeoutError, main
+from agent_native_graph.application.metrics import (
+    _summarize_llm_metrics,
+    _summarize_tool_metrics,
+    _update_summary,
+)
+from agent_native_graph.core.backend import AgentGraphBackend
 from agent_native_graph.core.tool_specs import (
-    SCHEMA_ENTRY_MODES,
-    _native_system_prompt,
     _tool_specs,
 )
 from agent_native_graph.core.tooling import call_registered_tool
+from agent_native_graph.domain.handles import Handle
 
 
-class AgentToolBackend:
+class Neo4jGraphBackend(AgentGraphBackend):
     _DEFAULT_MAX_INPUT_ROWS = 5000
     _DEFAULT_MAX_SET_OPERAND_ROWS = 10000
 
@@ -127,151 +73,69 @@ class AgentToolBackend:
         registered_result = call_registered_tool(self, tool, args)
         if registered_result is not None:
             return registered_result
-        if tool == "schema_overview":
-            return self._schema_overview()
-        if tool == "schema_search":
-            return self._schema_search(args)
-        if tool == "schema_describe_label":
-            return self._schema_describe_label(args)
-        if tool == "schema_describe_relationship":
-            return self._schema_describe_relationship(args)
-        if tool == "schema_inspect":
-            return self._schema_inspect()
-        if tool == "schema_get":
-            return self._schema_get()
-        if tool == "schema_affordance":
-            return self._schema_affordance()
-        if tool == "inspect_paths":
-            return self._inspect_paths(args)
-        if tool == "summarize_handle":
-            return self._summarize_handle(args)
-        if tool == "handle_recap":
-            return self._handle_recap(args)
-        if tool == "repair_empty_result":
-            return self._repair_empty_result(args)
-        if tool == "draft_tool_plan":
-            return self._draft_tool_plan(args)
-        if tool == "validate_tool_plan":
-            return self._validate_tool_plan(args)
-        if tool == "entity_resolve":
-            return self._entity_resolve(args)
-        if tool == "node_search":
-            return self._node_search(args)
-        if tool == "node_scan":
-            return self._node_scan(args)
-        if tool == "count_nodes":
-            return self._count_nodes(args)
-        if tool == "count_handle":
-            return self._count_handle(args)
-        if tool == "expand":
-            return self._expand(args)
-        if tool == "expand_aggregate":
-            return self._expand_aggregate(args)
-        if tool == "optional_expand_count":
-            return self._optional_expand_count(args)
-        if tool == "optional_count_by_pattern":
-            return self._optional_count_by_pattern(args)
-        if tool == "relationship_query":
-            return self._relationship_query(args)
-        if tool == "multi_hop_query":
-            return self._multi_hop_query(args)
-        if tool == "pattern_query":
-            return self._pattern_query(args)
-        if tool == "top_entities_by_property":
-            return self._top_entities_by_property(args)
-        if tool == "constraint_query":
-            return self._constraint_query(args)
-        if tool == "group_count_by_pattern":
-            return self._group_count_by_pattern(args)
-        if tool == "entity_set_operation":
-            return self._entity_set_operation(args)
-        if tool == "set_count_by_patterns":
-            return self._set_count_by_patterns(args)
-        if tool == "filter":
-            return self._filter(args)
-        if tool == "filter_same_node":
-            return self._filter_same_node(args)
-        if tool == "join_handles":
-            return self._join_handles(args)
-        if tool == "same_target_role_intersection":
-            return self._same_target_role_intersection(args)
-        if tool == "shared_role_aggregate":
-            return self._shared_role_aggregate(args)
-        if tool == "combine":
-            return self._combine(args)
-        if tool == "group_handle":
-            return self._aggregate(args)
-        if tool == "aggregate":
-            return self._aggregate(args)
-        if tool == "project":
-            return self._project(args)
-        if tool == "compare":
-            return self._compare(args)
-        if tool == "fetch":
-            return self._fetch(args)
-        raise ValueError(f"Unknown tool: {tool}")
+        raise ValueError(f"Unknown tool or invalid arguments for tool: {tool}")
 
     def _schema_inspect(self) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_inspect
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_inspect
 
         return schema_inspect(self)
 
     def _schema_overview(self) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_overview
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_overview
 
         return schema_overview(self)
 
     def _schema_search(self, args: dict[str, Any]) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_search
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_search
 
         return schema_search(self, **args)
 
     def _schema_describe_label(self, args: dict[str, Any]) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_describe_label
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_describe_label
 
         return schema_describe_label(self, **args)
 
     def _schema_describe_relationship(self, args: dict[str, Any]) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_describe_relationship
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_describe_relationship
 
         return schema_describe_relationship(self, **args)
 
     def _schema_score(self, query_tokens: set[str], values: list[Any]) -> int:
-        from agent_native_graph.tools.schema import schema_score
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_score
 
         return schema_score(self, query_tokens, values)
 
     def _schema_get(self) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_get
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_get
 
         return schema_get(self)
 
     def _schema_affordance(self) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import schema_affordance
+        from agent_native_graph.backends.neo4j.schema_runtime import schema_affordance
 
         return schema_affordance(self)
 
     def _node_property_affordances(
         self, label: str, props: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        from agent_native_graph.tools.schema import node_property_affordances
+        from agent_native_graph.backends.neo4j.schema_runtime import node_property_affordances
 
         return node_property_affordances(self, label, props)
 
     def _node_property_samples(self, label: str, prop: str, *, limit: int = 3) -> list[Any]:
-        from agent_native_graph.tools.schema import node_property_samples
+        from agent_native_graph.backends.neo4j.schema_runtime import node_property_samples
 
         return node_property_samples(self, label, prop, limit=limit)
 
     def _relationship_property_samples(
         self, rel_type: str, prop: str, *, limit: int = 3
     ) -> list[Any]:
-        from agent_native_graph.tools.schema import relationship_property_samples
+        from agent_native_graph.backends.neo4j.schema_runtime import relationship_property_samples
 
         return relationship_property_samples(self, rel_type, prop, limit=limit)
 
     def _inspect_paths(self, args: dict[str, Any]) -> dict[str, Any]:
-        from agent_native_graph.tools.schema import inspect_paths
+        from agent_native_graph.backends.neo4j.schema_runtime import inspect_paths
 
         return inspect_paths(self, **args)
 
@@ -350,7 +214,7 @@ class AgentToolBackend:
         }
 
     def _repair_empty_result(self, args: dict[str, Any]) -> dict[str, Any]:
-        from agent_native_graph.tools.diagnostics import repair_empty_result
+        from agent_native_graph.core.diagnostics_runtime import repair_empty_result
 
         return repair_empty_result(
             self,
@@ -3353,788 +3217,6 @@ def _coerce_filter_value(value: Any, value_type: Any) -> Any:
     return value
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    add_neo4j_args(parser)
-    add_llm_args(parser)
-    parser.add_argument("--tasks", type=Path, required=True)
-    parser.add_argument("--schema-json", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--limit", type=int)
-    parser.add_argument("--max-steps", type=int, default=12)
-    parser.add_argument("--task-timeout-s", type=int)
-    parser.add_argument("--neo4j-query-timeout-s", type=int, default=20)
-    parser.add_argument("--native-tools", action="store_true")
-    parser.add_argument(
-        "--tool-choice",
-        choices=["auto", "required"],
-        default="auto",
-        help=(
-            "Native tool-call selection policy. Use auto for realistic agent runs; "
-            "required forces a tool call but can make some providers generate very "
-            "long pre-tool responses."
-        ),
-    )
-    parser.add_argument("--enable-planning-tools", action="store_true")
-    parser.add_argument("--wrapper-planning", action="store_true")
-    parser.add_argument("--auto-fetch-on-done", action="store_true")
-    parser.add_argument(
-        "--evaluation-fetch-all-pages",
-        action="store_true",
-        help=(
-            "Benchmark-only mode: when the model fetches a paginated final handle, "
-            "retrieve all rows for answer comparison. Keep disabled for agent-safe "
-            "runtime behavior."
-        ),
-    )
-    parser.add_argument(
-        "--schema-entry",
-        choices=SCHEMA_ENTRY_MODES,
-        default="overview",
-        help=(
-            "Schema discovery profile for native tool runs. overview is the "
-            "current full first call, overview_light returns a smaller first "
-            "payload, targeted_first hides schema_overview and starts from "
-            "schema_search, overview_expand_first keeps schema_overview but "
-            "hides pattern_query to favor composable expand/project flows, "
-            "overview_light_expand_first combines the smaller overview with "
-            "the expand-first tool surface."
-        ),
-    )
-    parser.add_argument(
-        "--enable-runner-guardrails",
-        action="store_true",
-        help=(
-            "Enable local runner interventions that can replace unsafe model "
-            "tool calls. Keep disabled for clean tool-call quality benchmarks."
-        ),
-    )
-    parser.add_argument("--concurrency", type=int, default=3)
-    parser.add_argument("--resume", action="store_true")
-    args = parser.parse_args()
-
-    tasks = limited_tasks(read_jsonl(args.tasks), args.limit)
-    done_qids = completed_qids(args.out) if args.resume else set()
-    if args.out.exists() and not args.resume:
-        args.out.unlink()
-    schema = json.loads(args.schema_json.read_text(encoding="utf-8"))
-    llm = ChatClient(
-        base_url=args.base_url,
-        model=args.model,
-        api_key_env=args.api_key_env,
-        api_key_file=args.api_key_file,
-        enable_thinking=args.enable_thinking,
-        thinking_effort=args.thinking_effort,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
-    )
-
-    if args.task_timeout_s and args.concurrency <= 1:
-        signal.signal(signal.SIGALRM, _raise_task_timeout)
-
-    summary = {
-        "total": 0,
-        "tool_success": 0,
-        "matches_answer_json": 0,
-        "tool_calls": 0,
-        "llm_calls": 0,
-    }
-    pending_tasks = []
-    for task in tasks:
-        if task["qid"] in done_qids:
-            _log(f"SKIP  {task['qid']} (already done)")
-        else:
-            pending_tasks.append(task)
-
-    common_kwargs = {
-        "llm": llm,
-        "schema": schema,
-        "neo4j_uri": args.neo4j_uri,
-        "neo4j_user": args.neo4j_user,
-        "neo4j_password": args.neo4j_password,
-        "neo4j_query_timeout_s": args.neo4j_query_timeout_s,
-        "max_steps": args.max_steps,
-        "native_tools": args.native_tools,
-        "tool_choice": args.tool_choice,
-        "enable_planning_tools": args.enable_planning_tools,
-        "schema_entry": args.schema_entry,
-        "wrapper_planning": args.wrapper_planning,
-        "auto_fetch_on_done": args.auto_fetch_on_done,
-        "evaluation_fetch_all_pages": args.evaluation_fetch_all_pages,
-        "enable_runner_guardrails": args.enable_runner_guardrails,
-        "task_timeout_s": args.task_timeout_s if args.concurrency <= 1 else None,
-    }
-    if args.concurrency <= 1:
-        for task in pending_tasks:
-            row = _run_agent_task(task, **common_kwargs)
-            append_jsonl(args.out, row)
-            _update_summary(summary, row)
-    else:
-        with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-            futures = [
-                executor.submit(_run_agent_task, task, **common_kwargs) for task in pending_tasks
-            ]
-            for future in as_completed(futures):
-                row = future.result()
-                append_jsonl(args.out, row)
-                _update_summary(summary, row)
-    if summary["total"]:
-        summary["avg_tool_calls"] = summary["tool_calls"] / summary["total"]
-        summary["avg_llm_calls"] = summary["llm_calls"] / summary["total"]
-    print(json.dumps(summary, sort_keys=True))
-
-
-def _run_agent_task(
-    task: dict[str, Any],
-    *,
-    llm: ChatClient,
-    schema: dict[str, Any],
-    neo4j_uri: str,
-    neo4j_user: str,
-    neo4j_password: str,
-    neo4j_query_timeout_s: int | None,
-    max_steps: int,
-    native_tools: bool,
-    tool_choice: str,
-    enable_planning_tools: bool,
-    schema_entry: str,
-    wrapper_planning: bool,
-    auto_fetch_on_done: bool,
-    evaluation_fetch_all_pages: bool,
-    enable_runner_guardrails: bool,
-    task_timeout_s: int | None,
-) -> dict[str, Any]:
-    _log(f"START {task['qid']} | {task['nl_question'][:80]}")
-    backend = AgentToolBackend(
-        neo4j_uri,
-        neo4j_user,
-        neo4j_password,
-        schema,
-        query_timeout_s=neo4j_query_timeout_s,
-        schema_entry=schema_entry,
-    )
-    started = time.perf_counter()
-    transcript: list[dict[str, Any]] = []
-    llm_call_metrics: list[dict[str, Any]] = []
-    error: str | None = None
-    llm_call_count = 0
-    planning_required = wrapper_planning and _requires_wrapper_planning(schema, task["nl_question"])
-    planning_injected = False
-    try:
-        if task_timeout_s:
-            signal.alarm(task_timeout_s)
-        for step_i in range(max_steps):
-            llm_call_count += 1
-            _log(f"  LLM call {llm_call_count} (step {step_i + 1}/{max_steps})")
-            action = _next_action(
-                llm,
-                task["nl_question"],
-                transcript,
-                native_tools=native_tools,
-                tool_choice=tool_choice,
-                enable_planning_tools=enable_planning_tools,
-                schema_entry=schema_entry,
-                enable_runner_guardrails=enable_runner_guardrails,
-            )
-            llm_meta = action.pop("_llm_meta", None)
-            if isinstance(llm_meta, dict):
-                llm_call_metrics.append(llm_meta)
-            if enable_runner_guardrails:
-                action = _guarded_action(task["nl_question"], transcript, action)
-            tool = action.get("tool")
-            _log(
-                f"  -> tool={tool} args="
-                f"{json.dumps(action.get('args') or {}, ensure_ascii=False)[:120]}"
-            )
-            if tool == "done":
-                if backend.last_fetch is None:
-                    handle = _latest_fetchable_handle(transcript)
-                    if handle is not None:
-                        fetch_action = {
-                            "tool": "fetch",
-                            "args": {"from": handle, "limit": 1000},
-                            "auto": True,
-                        }
-                        _log(f"  -> auto tool=fetch args={{'from': '{handle}'}}")
-                        try:
-                            result = backend.call("fetch", dict(fetch_action["args"]))
-                            if evaluation_fetch_all_pages:
-                                result = _evaluation_fetch_all_pages(
-                                    backend,
-                                    fetch_action,
-                                    result,
-                                )
-                            transcript.append({"action": fetch_action, "result": result})
-                            _log("     auto ok matched=None")
-                            break
-                        except Exception as tool_exc:
-                            result = {
-                                "status": "tool_error",
-                                "error": f"{tool_exc.__class__.__name__}: {tool_exc}",
-                            }
-                            transcript.append({"action": fetch_action, "result": result})
-                            _log(f"     auto error: {tool_exc.__class__.__name__}: {tool_exc}")
-                        continue
-                    result = {
-                        "status": "tool_error",
-                        "error": "done_disabled: fetch is the only supported finalization action, and no fetchable handle is available yet.",
-                    }
-                    transcript.append({"action": action, "result": result})
-                    _log("     error: done_disabled_no_handle")
-                    continue
-                break
-            try:
-                result = backend.call(str(tool), dict(action.get("args") or {}))
-                if tool == "fetch" and evaluation_fetch_all_pages:
-                    result = _evaluation_fetch_all_pages(backend, action, result)
-                matched = result.get("matched_count") if isinstance(result, dict) else None
-                _log(f"     ok matched={matched}")
-            except TaskTimeoutError:
-                raise
-            except Exception as tool_exc:
-                _log(f"     error: {tool_exc.__class__.__name__}: {tool_exc}")
-                result = {
-                    "status": "tool_error",
-                    "error": f"{tool_exc.__class__.__name__}: {tool_exc}",
-                }
-                transcript.append({"action": action, "result": result})
-                continue
-            transcript.append({"action": action, "result": result})
-            if (
-                native_tools
-                and planning_required
-                and not planning_injected
-                and tool == "schema_inspect"
-            ):
-                plan_action = {
-                    "tool": "draft_tool_plan",
-                    "args": {"question": task["nl_question"], "max_steps": 6},
-                    "auto": True,
-                }
-                _log("  -> auto tool=draft_tool_plan args={...}")
-                try:
-                    plan_result = backend.call("draft_tool_plan", dict(plan_action["args"]))
-                    _log("     auto ok matched=None")
-                except Exception as tool_exc:
-                    _log(f"     auto error: {tool_exc.__class__.__name__}: {tool_exc}")
-                    plan_result = {
-                        "status": "tool_error",
-                        "error": f"{tool_exc.__class__.__name__}: {tool_exc}",
-                    }
-                transcript.append({"action": plan_action, "result": plan_result})
-                planning_injected = True
-            if tool == "fetch":
-                break
-            if auto_fetch_on_done and step_i == max_steps - 1 and backend.last_fetch is None:
-                handle = _latest_fetchable_handle(transcript)
-                if handle is not None:
-                    fetch_action = {
-                        "tool": "fetch",
-                        "args": {"from": handle, "limit": 1000},
-                        "auto": True,
-                        "reason": "max_steps_auto_fetch",
-                    }
-                    _log(f"  -> auto tool=fetch args={{'from': '{handle}'}} reason=max_steps")
-                    try:
-                        fetch_result = backend.call("fetch", dict(fetch_action["args"]))
-                        if evaluation_fetch_all_pages:
-                            fetch_result = _evaluation_fetch_all_pages(
-                                backend,
-                                fetch_action,
-                                fetch_result,
-                            )
-                        _log("     auto ok matched=None")
-                    except Exception as tool_exc:
-                        _log(f"     auto error: {tool_exc.__class__.__name__}: {tool_exc}")
-                        fetch_result = {
-                            "status": "tool_error",
-                            "error": f"{tool_exc.__class__.__name__}: {tool_exc}",
-                        }
-                    transcript.append({"action": fetch_action, "result": fetch_result})
-                    break
-    except Exception as exc:
-        error = f"{exc.__class__.__name__}: {exc}"
-        _log(f"  EXCEPTION: {error}")
-    finally:
-        if task_timeout_s:
-            signal.alarm(0)
-        backend.close()
-
-    expected = normalize_answer_rows(parse_answer_json(task.get("answer_json")))
-    actual = backend.last_fetch or []
-    matches = error is None and result_matches_answer(actual, expected)
-    tool_call_count = len(transcript)
-    tool_error_count = sum(
-        1 for step in transcript if step.get("result", {}).get("status") == "tool_error"
-    )
-    llm_metric_summary = _summarize_llm_metrics(llm_call_metrics)
-    tool_metric_summary = _summarize_tool_metrics(transcript)
-    elapsed = time.perf_counter() - started
-    ok = error is None and backend.last_fetch is not None
-    _log(
-        f"END   {task['qid']} | ok={ok} "
-        f"match={matches} tools={tool_call_count} errors={tool_error_count} "
-        f"elapsed={elapsed:.1f}s"
-    )
-    return {
-        "qid": task["qid"],
-        "approach": "agent_tools_neo4j",
-        "nl_question": task["nl_question"],
-        "gold_cypher": task["gold_cypher"],
-        "transcript": transcript,
-        "rows": actual,
-        "expected": expected,
-        "ok": ok,
-        "matches_answer_json": matches,
-        "tool_call_count": tool_call_count,
-        "tool_error_count": tool_error_count,
-        "llm_call_count": llm_call_count,
-        "llm_call_metrics": llm_call_metrics,
-        "llm_metric_summary": llm_metric_summary,
-        "tool_metric_summary": tool_metric_summary,
-        "elapsed_s": elapsed,
-        "error": error,
-    }
-
-
-def _summarize_llm_metrics(metrics: list[dict[str, Any]]) -> dict[str, Any]:
-    finish_reasons = Counter(
-        str(item.get("finish_reason")) for item in metrics if item.get("finish_reason") is not None
-    )
-    initial_finish_reasons = Counter(
-        str(item.get("initial_finish_reason"))
-        for item in metrics
-        if item.get("initial_finish_reason") is not None
-    )
-    usage_totals: Counter[str] = Counter()
-    initial_usage_totals: Counter[str] = Counter()
-    completion_detail_totals: Counter[str] = Counter()
-    prompt_detail_totals: Counter[str] = Counter()
-    for item in metrics:
-        _add_usage_totals(usage_totals, item.get("usage"))
-        _add_usage_totals(initial_usage_totals, item.get("initial_usage"))
-        usage = item.get("usage") if isinstance(item.get("usage"), dict) else {}
-        _add_usage_totals(
-            completion_detail_totals,
-            usage.get("completion_tokens_details") if isinstance(usage, dict) else {},
-        )
-        _add_usage_totals(
-            prompt_detail_totals,
-            usage.get("prompt_tokens_details") if isinstance(usage, dict) else {},
-        )
-    return {
-        "finish_reasons": dict(finish_reasons),
-        "initial_finish_reasons": dict(initial_finish_reasons),
-        "low_effort_retry_count": sum(1 for item in metrics if item.get("low_effort_retry")),
-        "rate_limit_retries": sum(int(item.get("rate_limit_retries") or 0) for item in metrics),
-        "http_retries": sum(int(item.get("http_retries") or 0) for item in metrics),
-        "request_attempts": sum(int(item.get("request_attempts") or 0) for item in metrics),
-        "usage_totals": dict(usage_totals),
-        "initial_usage_totals": dict(initial_usage_totals),
-        "completion_tokens_details_totals": dict(completion_detail_totals),
-        "prompt_tokens_details_totals": dict(prompt_detail_totals),
-    }
-
-
-def _add_usage_totals(target: Counter[str], usage: Any) -> None:
-    if not isinstance(usage, dict):
-        return
-    for key, value in usage.items():
-        if isinstance(value, int | float):
-            target[str(key)] += value
-
-
-def _summarize_tool_metrics(transcript: list[dict[str, Any]]) -> dict[str, Any]:
-    tool_counts: Counter[str] = Counter()
-    dirty_schema_args = 0
-    duplicate_schema_overview_calls = 0
-    repeated_targeted_schema_calls = 0
-    seen_targeted_schema: set[tuple[str, Any]] = set()
-    schema_tools = {
-        "schema_overview",
-        "schema_search",
-        "schema_describe_label",
-        "schema_describe_relationship",
-    }
-    for step in transcript:
-        action = step.get("action") or {}
-        if not isinstance(action, dict):
-            continue
-        tool = str(action.get("tool") or "")
-        if not tool:
-            continue
-        tool_counts[tool] += 1
-        args = action.get("args") if isinstance(action.get("args"), dict) else {}
-        if tool == "schema_overview":
-            if tool_counts[tool] > 1:
-                duplicate_schema_overview_calls += 1
-            if args:
-                dirty_schema_args += 1
-        elif tool == "schema_search":
-            key = (tool, args.get("query"))
-            if key in seen_targeted_schema:
-                repeated_targeted_schema_calls += 1
-            seen_targeted_schema.add(key)
-            if set(args) - {"query", "limit"}:
-                dirty_schema_args += 1
-        elif tool == "schema_describe_label":
-            key = (tool, args.get("label"))
-            if key in seen_targeted_schema:
-                repeated_targeted_schema_calls += 1
-            seen_targeted_schema.add(key)
-            if set(args) - {"label"}:
-                dirty_schema_args += 1
-        elif tool == "schema_describe_relationship":
-            key = (tool, args.get("relationship_type"))
-            if key in seen_targeted_schema:
-                repeated_targeted_schema_calls += 1
-            seen_targeted_schema.add(key)
-            if set(args) - {"relationship_type"}:
-                dirty_schema_args += 1
-    return {
-        "tool_counts": dict(tool_counts),
-        "schema_tool_calls": sum(tool_counts.get(tool, 0) for tool in schema_tools),
-        "duplicate_schema_overview_calls": duplicate_schema_overview_calls,
-        "repeated_targeted_schema_calls": repeated_targeted_schema_calls,
-        "dirty_schema_args": dirty_schema_args,
-    }
-
-
-def _update_summary(summary: dict[str, Any], row: dict[str, Any]) -> None:
-    summary["total"] += 1
-    summary["tool_success"] += int(bool(row["ok"]))
-    summary["matches_answer_json"] += int(bool(row["matches_answer_json"]))
-    summary["tool_calls"] += int(row["tool_call_count"])
-    summary["llm_calls"] += int(row["llm_call_count"])
-    llm_summary = row.get("llm_metric_summary") or {}
-    summary["llm_low_effort_retries"] = summary.get("llm_low_effort_retries", 0) + int(
-        llm_summary.get("low_effort_retry_count") or 0
-    )
-    summary["llm_initial_length_finishes"] = summary.get("llm_initial_length_finishes", 0) + int(
-        llm_summary.get("initial_finish_reasons", {}).get("length") or 0
-    )
-    summary["llm_final_length_finishes"] = summary.get("llm_final_length_finishes", 0) + int(
-        llm_summary.get("finish_reasons", {}).get("length") or 0
-    )
-    summary["llm_rate_limit_retries"] = summary.get("llm_rate_limit_retries", 0) + int(
-        llm_summary.get("rate_limit_retries") or 0
-    )
-    usage_totals = llm_summary.get("usage_totals") or {}
-    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-        summary[f"llm_{key}"] = summary.get(f"llm_{key}", 0) + int(usage_totals.get(key) or 0)
-    tool_summary = row.get("tool_metric_summary") or {}
-    summary["dirty_schema_args"] = summary.get("dirty_schema_args", 0) + int(
-        tool_summary.get("dirty_schema_args") or 0
-    )
-    summary["duplicate_schema_overview_calls"] = summary.get(
-        "duplicate_schema_overview_calls", 0
-    ) + int(tool_summary.get("duplicate_schema_overview_calls") or 0)
-    summary["repeated_targeted_schema_calls"] = summary.get(
-        "repeated_targeted_schema_calls", 0
-    ) + int(tool_summary.get("repeated_targeted_schema_calls") or 0)
-
-
-def _task_prompt(question: str, transcript: list[dict[str, Any]]) -> str:
-    return json.dumps(
-        {
-            "question": question,
-            "previous_tool_results": transcript[-8:],
-            "instruction": "Choose the next tool call. Use fetch when the answer handle is ready.",
-        },
-        ensure_ascii=False,
-    )
-
-
-def _next_action(
-    llm: ChatClient,
-    question: str,
-    transcript: list[dict[str, Any]],
-    *,
-    native_tools: bool,
-    tool_choice: str,
-    enable_planning_tools: bool,
-    schema_entry: str,
-    enable_runner_guardrails: bool = False,
-) -> dict[str, Any]:
-    if not native_tools:
-        message = llm.chat(
-            [
-                {
-                    "role": "system",
-                    "content": _json_system_prompt(
-                        enable_planning_tools=enable_planning_tools,
-                        schema_entry=schema_entry,
-                    ),
-                },
-                {"role": "user", "content": _task_prompt(question, transcript)},
-            ]
-        )
-        raw = str(message.get("content") or "")
-        try:
-            action = _parse_action(raw)
-        except json.JSONDecodeError:
-            if enable_runner_guardrails:
-                action = _fallback_action(transcript)
-                action["_llm_meta"] = message.get("__chat_meta")
-                return action
-            raise
-        action["args"] = _normalize_tool_args(action.get("args") or {})
-        action["_llm_meta"] = message.get("__chat_meta")
-        return action
-
-    message = llm.chat(
-        [
-            {
-                "role": "system",
-                "content": _native_system_prompt(
-                    enable_planning_tools=enable_planning_tools,
-                    schema_entry=schema_entry,
-                ),
-            },
-            {"role": "user", "content": _task_prompt(question, transcript)},
-        ],
-        tools=_tool_specs(enable_planning_tools=enable_planning_tools, schema_entry=schema_entry),
-        tool_choice=tool_choice,
-    )
-    tool_calls = message.get("tool_calls") or []
-    if tool_calls:
-        call = tool_calls[0]
-        function = call.get("function") or {}
-        name = str(function.get("name") or "")
-        raw_args = function.get("arguments") or "{}"
-        if isinstance(raw_args, str):
-            try:
-                args = json.loads(raw_args or "{}")
-            except json.JSONDecodeError:
-                if enable_runner_guardrails:
-                    return _fallback_action(transcript)
-                raise
-        elif isinstance(raw_args, dict):
-            args = raw_args
-        else:
-            raise ValueError(f"Unsupported native tool arguments: {raw_args!r}")
-        return {
-            "tool": name,
-            "args": _normalize_tool_args(_normalize_native_args(args)),
-            "_llm_meta": message.get("__chat_meta"),
-        }
-
-    content = str(message.get("content") or "").strip()
-    if content:
-        try:
-            action = _parse_action(content)
-        except json.JSONDecodeError:
-            if enable_runner_guardrails:
-                action = _fallback_action(transcript)
-                action["_llm_meta"] = message.get("__chat_meta")
-                return action
-            raise
-        action["args"] = _normalize_tool_args(action.get("args") or {})
-        action["_llm_meta"] = message.get("__chat_meta")
-        return action
-    if enable_runner_guardrails:
-        action = _fallback_action(transcript)
-        action["_llm_meta"] = message.get("__chat_meta")
-        return action
-    raise ValueError("Model did not return a native tool call or JSON action.")
-
-
-def _fallback_action(transcript: list[dict[str, Any]]) -> dict[str, Any]:
-    handle = _latest_fetchable_handle(transcript)
-    if handle is not None:
-        return {
-            "tool": "fetch",
-            "args": {"from": handle, "limit": 1000},
-            "auto": True,
-            "reason": "fallback_fetch",
-        }
-    return {"tool": "schema_overview", "args": {}}
-
-
-def _guarded_action(
-    question: str,
-    transcript: list[dict[str, Any]],
-    action: dict[str, Any],
-) -> dict[str, Any]:
-    if _latest_result_has_finalization_hint(transcript):
-        handle = _latest_fetchable_handle(transcript)
-        if handle is not None and action.get("tool") != "fetch":
-            return {
-                "tool": "fetch",
-                "args": {"from": handle, "limit": 1000},
-                "auto": True,
-                "reason": "finalization_hint_guard",
-                "blocked_action": action,
-            }
-
-    if action.get("tool") == "schema_overview" and _tool_was_called(transcript, "schema_overview"):
-        handle = _latest_fetchable_handle(transcript)
-        if handle is not None:
-            return {
-                "tool": "fetch",
-                "args": {"from": handle, "limit": 1000},
-                "auto": True,
-                "reason": "duplicate_schema_overview_guard",
-                "blocked_action": action,
-            }
-        return {
-            "tool": "schema_search",
-            "args": {"query": question, "limit": 8},
-            "auto": True,
-            "reason": "duplicate_schema_overview_guard",
-            "blocked_action": action,
-        }
-
-    return action
-
-
-def _latest_result_has_finalization_hint(transcript: list[dict[str, Any]]) -> bool:
-    for step in reversed(transcript):
-        result = step.get("result") or {}
-        if not isinstance(result, dict):
-            continue
-        if result.get("status") == "tool_error":
-            continue
-        return bool(result.get("finalization_hint"))
-    return False
-
-
-def _evaluation_fetch_all_pages(
-    backend: AgentToolBackend,
-    action: dict[str, Any],
-    result: dict[str, Any],
-) -> dict[str, Any]:
-    if not result.get("truncated"):
-        return result
-    args = dict(action.get("args") or {})
-    handle = args.get("from")
-    total_count = int(result.get("total_count") or 0)
-    if not handle or total_count <= int(result.get("returned_count") or 0):
-        return result
-    full_result = backend.call(
-        "fetch",
-        {
-            "from": handle,
-            "offset": 0,
-            "limit": total_count,
-        },
-    )
-    full_result["evaluation_fetch_all_pages"] = True
-    full_result["model_requested_limit"] = args.get("limit")
-    return full_result
-
-
-def _tool_was_called(transcript: list[dict[str, Any]], tool: str) -> bool:
-    return any((step.get("action") or {}).get("tool") == tool for step in transcript)
-
-
-def _normalize_native_args(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: _normalize_native_args(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_normalize_native_args(item) for item in value]
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped.startswith(("{", "[")):
-            try:
-                return _normalize_native_args(json.loads(stripped))
-            except json.JSONDecodeError:
-                return value
-    return value
-
-
-def _normalize_tool_args(args: Any) -> dict[str, Any]:
-    if not isinstance(args, dict):
-        return {}
-    normalized = dict(args)
-    for key in LIST_ARG_KEYS:
-        if key in normalized:
-            normalized[key] = _normalize_list_arg(normalized[key])
-    return normalized
-
-
-def _normalize_list_arg(value: Any) -> list[Any]:
-    value = _normalize_native_args(value)
-    if value is None:
-        return []
-    if isinstance(value, dict):
-        return [value]
-    if isinstance(value, list):
-        return [_normalize_native_args(item) for item in value]
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped.startswith(("{", "[")):
-            try:
-                return _normalize_list_arg(json.loads(stripped))
-            except json.JSONDecodeError:
-                return []
-    return []
-
-
-def _latest_fetchable_handle(transcript: list[dict[str, Any]]) -> str | None:
-    diagnostic_tools = {
-        "schema_overview",
-        "schema_search",
-        "schema_describe_label",
-        "schema_describe_relationship",
-        "schema_inspect",
-        "schema_get",
-        "schema_affordance",
-        "draft_tool_plan",
-        "validate_tool_plan",
-        "inspect_paths",
-        "summarize_handle",
-        "repair_empty_result",
-    }
-    final_answer_tools = {
-        "group_handle",
-        "aggregate",
-        "compare",
-        "count_handle",
-        "count_nodes",
-        "expand_aggregate",
-        "constraint_query",
-        "filter",
-        "project",
-        "relationship_query",
-        "shared_role_aggregate",
-    }
-    for step in reversed(transcript):
-        action = step.get("action") or {}
-        tool = action.get("tool")
-        if tool in diagnostic_tools:
-            continue
-        result = step.get("result") or {}
-        if not isinstance(result, dict):
-            continue
-        handle = result.get("handle")
-        if not handle:
-            continue
-        # Auto-fetch is deliberately conservative: exploratory entity handles
-        # such as node_scan/expand are usually intermediate, while table-shaped
-        # or explicitly projecting/counting tools are much more likely final.
-        if result.get("kind") == "table" or tool in final_answer_tools:
-            return str(handle)
-    return None
-
-
-def _raise_task_timeout(signum: int, frame: Any) -> None:
-    raise TaskTimeoutError("Task exceeded --task-timeout-s")
-
-
-def _log(message: str) -> None:
-    timestamp = datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
-
-
-def _parse_action(raw: str) -> dict[str, Any]:
-    stripped = raw.strip()
-    match = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL)
-    if match:
-        stripped = match.group(1).strip()
-    return json.loads(stripped)
-
-
 def _node_payload(node: Any) -> dict[str, Any]:
     return {
         "labels": sorted(node.labels),
@@ -4162,110 +3244,7 @@ def _tool_value(value: Any) -> Any:
         return value
 
 
-def introspect_schema(
-    uri: str,
-    user: str,
-    password: str,
-    *,
-    query_timeout_s: int | None = None,
-) -> dict[str, Any]:
-    """Build the ANA schema payload directly from Neo4j metadata."""
-    driver = GraphDatabase.driver(
-        uri, auth=(user, password), connection_timeout=120.0, max_transaction_retry_time=120.0
-    )
-    try:
-        with driver.session() as session:
-            labels = [
-                str(record["label"])
-                for record in _run_introspection(
-                    session,
-                    "CALL db.labels() YIELD label RETURN label ORDER BY label",
-                    query_timeout_s=query_timeout_s,
-                )
-            ]
-            relationship_types = [
-                str(record["relationshipType"])
-                for record in _run_introspection(
-                    session,
-                    (
-                        "CALL db.relationshipTypes() YIELD relationshipType "
-                        "RETURN relationshipType ORDER BY relationshipType"
-                    ),
-                    query_timeout_s=query_timeout_s,
-                )
-            ]
-            node_properties = [
-                {
-                    "nodeType": record["nodeType"],
-                    "nodeLabels": list(record["nodeLabels"] or []),
-                    "propertyName": record["propertyName"],
-                    "propertyTypes": list(record["propertyTypes"] or []),
-                    "mandatory": bool(record["mandatory"]),
-                }
-                for record in _run_introspection(
-                    session,
-                    (
-                        "CALL db.schema.nodeTypeProperties() "
-                        "YIELD nodeType, nodeLabels, propertyName, propertyTypes, mandatory "
-                        "RETURN nodeType, nodeLabels, propertyName, propertyTypes, mandatory "
-                        "ORDER BY nodeType, propertyName"
-                    ),
-                    query_timeout_s=query_timeout_s,
-                )
-            ]
-            relationship_properties = [
-                {
-                    "relType": record["relType"],
-                    "propertyName": record["propertyName"],
-                    "propertyTypes": list(record["propertyTypes"] or []),
-                    "mandatory": bool(record["mandatory"]),
-                }
-                for record in _run_introspection(
-                    session,
-                    (
-                        "CALL db.schema.relTypeProperties() "
-                        "YIELD relType, propertyName, propertyTypes, mandatory "
-                        "RETURN relType, propertyName, propertyTypes, mandatory "
-                        "ORDER BY relType, propertyName"
-                    ),
-                    query_timeout_s=query_timeout_s,
-                )
-            ]
-            label_relationships = [
-                {
-                    "source_label": record["source_label"],
-                    "relationship_type": record["relationship_type"],
-                    "target_label": record["target_label"],
-                }
-                for record in _run_introspection(
-                    session,
-                    (
-                        "MATCH (source)-[rel]->(target) "
-                        "UNWIND labels(source) AS source_label "
-                        "UNWIND labels(target) AS target_label "
-                        "RETURN DISTINCT source_label, type(rel) AS relationship_type, target_label "
-                        "ORDER BY source_label, relationship_type, target_label"
-                    ),
-                    query_timeout_s=query_timeout_s,
-                )
-            ]
-    finally:
-        driver.close()
-    return {
-        "labels": labels,
-        "relationship_types": relationship_types,
-        "node_properties": node_properties,
-        "relationship_properties": relationship_properties,
-        "label_relationships": label_relationships,
-    }
-
-
-def _run_introspection(session: Any, query: str, *, query_timeout_s: int | None) -> Any:
-    statement: str | Query = Query(query, timeout=query_timeout_s) if query_timeout_s else query
-    return session.run(statement)
-
-
-from agent_native_graph.tools.graph_utils import *  # noqa: F403 - re-export private compatibility helpers.
+from agent_native_graph.core.graph_utils import *  # noqa: F403 - re-export private compatibility helpers.
 
 
 if __name__ == "__main__":

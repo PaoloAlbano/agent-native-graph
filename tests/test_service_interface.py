@@ -2,9 +2,9 @@ from typing import Any
 
 
 def test_service_backend_introspects_schema_when_no_schema_file(monkeypatch) -> None:
-    from agent_native_graph.backends import neo4j
+    from agent_native_graph.backends.neo4j import introspection
+    from agent_native_graph.backends.neo4j import backend as backend_entrypoint
     from agent_native_graph.interfaces import service
-    from agent_native_graph.tools import backend as backend_entrypoint
 
     calls: dict[str, Any] = {}
     schema = {
@@ -53,8 +53,8 @@ def test_service_backend_introspects_schema_when_no_schema_file(monkeypatch) -> 
     monkeypatch.setenv("NEO4J_USER", "neo4j-user")
     monkeypatch.setenv("NEO4J_PASSWORD", "neo4j-password")
     monkeypatch.setenv("ANA_NEO4J_QUERY_TIMEOUT_S", "7")
-    monkeypatch.setattr(neo4j.backend, "introspect_schema", fake_introspect_schema)
-    monkeypatch.setattr(backend_entrypoint, "AgentToolBackend", FakeBackend)
+    monkeypatch.setattr(introspection, "introspect_schema", fake_introspect_schema)
+    monkeypatch.setattr(backend_entrypoint, "Neo4jGraphBackend", FakeBackend)
 
     backend = service._load_current_research_backend()
 

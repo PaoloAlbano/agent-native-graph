@@ -44,6 +44,7 @@ def get_tool_contract(status: ToolStatus | str | None = None) -> list[dict[str, 
             when_to_use=definition.when_to_use,
         )
         for definition in registered_tools().values()
+        if not definition.legacy
     ]
     if normalized_status is not None:
         contracts = [contract for contract in contracts if contract.status == normalized_status]

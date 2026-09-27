@@ -6,7 +6,6 @@ from enum import StrEnum
 class ToolStatus(StrEnum):
     CORE = "core"
     EXPERIMENTAL = "experimental"
-    DEPRECATED = "deprecated"
 
 
 class ToolProfile(StrEnum):

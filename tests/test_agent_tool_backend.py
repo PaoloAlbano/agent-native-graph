@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from agent_native_graph.backends.neo4j.backend import (
-    AgentToolBackend,
+    Neo4jGraphBackend,
     Handle,
     _ambiguous_relationship_only_constraints,
     _evaluation_fetch_all_pages,
@@ -30,7 +30,7 @@ def schema() -> dict[str, Any]:
 
 @pytest.fixture()
 def planning_backend(schema: dict[str, Any]) -> Any:
-    tool_backend = AgentToolBackend.__new__(AgentToolBackend)
+    tool_backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     tool_backend._schema = schema
     return tool_backend
 
@@ -118,8 +118,8 @@ def test_validate_tool_plan_flags_unknown_relationship_and_unbound_filter(
     assert any("unbound variable" in message for message in messages)
 
 
-def _schema_only_backend(schema: dict[str, Any]) -> AgentToolBackend:
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+def _schema_only_backend(schema: dict[str, Any]) -> Neo4jGraphBackend:
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._schema = schema
     backend._label_counts = lambda labels: {label: index + 1 for index, label in enumerate(labels)}
     return backend
@@ -219,7 +219,7 @@ def test_schema_describe_relationship_is_copyable_for_reverse_traversal(
 
 
 def test_pattern_query_rejects_relationship_name_used_as_property(schema: dict[str, Any]) -> None:
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._schema = schema
 
     with pytest.raises(ValueError, match="relationship 'basedIn' was used as property"):
@@ -251,7 +251,7 @@ def test_pattern_query_rejects_relationship_name_used_as_property(schema: dict[s
 
 
 def test_pattern_query_rejects_list_property_contains_operator(schema: dict[str, Any]) -> None:
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._schema = schema
 
     with pytest.raises(ValueError, match="country_of_citizenship is list\\[string\\]"):
@@ -274,7 +274,7 @@ def test_pattern_query_rejects_list_property_contains_operator(schema: dict[str,
 
 
 def test_filter_normalizes_scalar_operators_for_list_properties(schema: dict[str, Any]) -> None:
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._schema = schema
     backend._counter = 1
     backend._handles = {
@@ -334,7 +334,7 @@ def test_filter_normalizes_scalar_operators_for_list_properties(schema: dict[str
 
 
 def test_entity_set_operation_rejects_mismatched_entity_labels(schema: dict[str, Any]) -> None:
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._schema = schema
     backend._handles = {
         "h1": type(
@@ -372,7 +372,7 @@ def test_entity_set_operation_rejects_mismatched_entity_labels(schema: dict[str,
 def test_entity_set_operation_unions_multiple_entity_handles_with_next_step_hint(
     schema: dict[str, Any],
 ) -> None:
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._schema = schema
     backend._handles = {
         "h1": Handle(
@@ -906,9 +906,9 @@ class _FakeDriver:
         return _FakeSession(self)
 
 
-def _fake_backend(schema: dict[str, Any]) -> tuple[AgentToolBackend, _FakeDriver]:
+def _fake_backend(schema: dict[str, Any]) -> tuple[Neo4jGraphBackend, _FakeDriver]:
     driver = _FakeDriver()
-    backend = AgentToolBackend.__new__(AgentToolBackend)
+    backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     backend._driver = driver
     backend._schema = schema
     backend._query_timeout_s = None
@@ -2174,7 +2174,7 @@ def test_same_target_role_intersection_rejects_multi_named_targets_for_repeated_
 
 @pytest.fixture(scope="module")
 def backend(schema: dict[str, Any]) -> Any:
-    tool_backend = AgentToolBackend(
+    tool_backend = Neo4jGraphBackend(
         os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687"),
         os.getenv("NEO4J_USER", "neo4j"),
         os.getenv("NEO4J_PASSWORD", "password"),
