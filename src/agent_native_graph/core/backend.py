@@ -83,6 +83,10 @@ class AgentGraphBackend(ABC):
         """Find nodes by exact property equality."""
 
     @abstractmethod
+    def _value_search(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Find real property values in the graph before using them as filters."""
+
+    @abstractmethod
     def _node_scan(self, args: dict[str, Any]) -> dict[str, Any]:
         """List nodes of one label."""
 
@@ -169,6 +173,10 @@ class AgentGraphBackend(ABC):
     @abstractmethod
     def _compare(self, args: dict[str, Any]) -> dict[str, Any]:
         """Compare scalar values from two handles."""
+
+    @abstractmethod
+    def _scalar_compute(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Compute scalar arithmetic or reductions over projected handle values."""
 
     @abstractmethod
     def _fetch(self, args: dict[str, Any]) -> dict[str, Any]:

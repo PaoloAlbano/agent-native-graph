@@ -18,6 +18,7 @@ from agent_native_graph.application.metrics import (
     _summarize_llm_metrics,
     _summarize_tool_metrics,
     _update_summary,
+    classify_failure,
 )
 from agent_native_graph.core.graph_utils import _requires_wrapper_planning
 from agent_native_graph.core.tool_specs import SCHEMA_ENTRY_MODES
@@ -49,7 +50,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--task-timeout-s", type=int)
-    parser.add_argument("--neo4j-query-timeout-s", type=int, default=20)
+    parser.add_argument("--neo4j-query-timeout-s", type=int, default=30)
     parser.add_argument("--native-tools", action="store_true")
     parser.add_argument(
         "--tool-choice",
@@ -364,7 +365,7 @@ def _run_agent_task(
         f"match={matches} tools={tool_call_count} errors={tool_error_count} "
         f"elapsed={elapsed:.1f}s"
     )
-    return {
+    row = {
         "qid": task["qid"],
         "approach": "agent_tools_neo4j",
         "nl_question": task["nl_question"],
@@ -383,6 +384,8 @@ def _run_agent_task(
         "elapsed_s": elapsed,
         "error": error,
     }
+    row["failure_class"] = classify_failure(row)
+    return row
 
 
 def _raise_task_timeout(signum: int, frame: Any) -> None:

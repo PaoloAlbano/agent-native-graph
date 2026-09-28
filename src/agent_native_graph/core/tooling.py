@@ -141,7 +141,28 @@ def call_registered_tool(backend: Any, name: str, args: dict[str, Any]) -> dict[
         kwargs = {
             arg_name: value for arg_name, value in kwargs.items() if arg_name in accepted_parameters
         }
-    return definition.function(backend, **kwargs)
+    try:
+        return definition.function(backend, **kwargs)
+    except TypeError as exc:
+        missing = [
+            parameter_name
+            for parameter_name in accepted_parameters
+            if parameter_name not in kwargs
+            and signature.parameters[parameter_name].default is inspect.Parameter.empty
+        ]
+        if missing:
+            public_missing = [
+                alias
+                for alias, parameter_name in definition.argument_aliases.items()
+                if parameter_name in missing
+            ]
+            public_missing.extend(
+                parameter_name
+                for parameter_name in missing
+                if parameter_name not in definition.argument_aliases.values()
+            )
+            raise ValueError(f"{name} requires {', '.join(sorted(public_missing))}.") from exc
+        raise
 
 
 def registered_tool_contracts(status: ToolStatus | None = None) -> list[dict[str, str]]:

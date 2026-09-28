@@ -246,6 +246,82 @@ def tool_node_search(
 
 
 @tool(
+    name="value_search",
+    status=ToolStatus.CORE,
+    profile=ToolProfile.READONLY,
+    purpose="Finds real property values for a label before using them in filters or traversals.",
+    description="Finds real property values for nodes of a label using exact, case-insensitive, contains, prefix, or suffix matching. Use this when the question mentions a category/value such as an industry, country, type, status, or other property value and you need to know the exact stored value before filtering. Prefer this over repeated schema_search calls for data values. Do NOT use for named entity resolution when entity_resolve can anchor a specific node.",
+)
+def tool_value_search(
+    backend,
+    label: Annotated[
+        Any,
+        ToolParam(
+            "Node label whose property values should be searched, e.g. 'Industry' or 'Country'.",
+            schema={"type": "string"},
+        ),
+    ],
+    property: Annotated[
+        Any,
+        ToolParam("Property to search, usually 'name'.", schema={"type": "string"}),
+    ],
+    text: Annotated[
+        Any,
+        ToolParam(
+            "Text from the question to match against stored values, e.g. 'banking' or 'jewelry'.",
+            schema={"type": "string"},
+        ),
+    ],
+    match_mode: Annotated[
+        Any,
+        ToolParam(
+            "Matching mode. Use 'contains' for category phrases unless exact wording is known.",
+            required=False,
+            schema={
+                "type": "string",
+                "enum": ["auto", "exact", "iexact", "contains", "prefix", "suffix"],
+            },
+        ),
+    ] = None,
+    as_: Annotated[
+        Any,
+        ToolParam(
+            "Variable name for matched nodes if keep_entities=true. Default: lowercase label.",
+            required=False,
+            alias="as",
+            schema={"type": "string"},
+        ),
+    ] = None,
+    limit: Annotated[
+        Any,
+        ToolParam(
+            "Maximum matches. Default: 20. Use small values, then choose a returned value for filters/traversals.",
+            required=False,
+            schema={"type": "integer"},
+        ),
+    ] = None,
+    keep_entities: Annotated[
+        Any,
+        ToolParam(
+            "Set true when the returned nodes should be used as handles for expand/pattern tools. Default: true.",
+            required=False,
+            schema={"type": "boolean"},
+        ),
+    ] = None,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {"label": label, "property": property, "text": text}
+    if match_mode is not None:
+        args["match_mode"] = match_mode
+    if as_ is not None:
+        args["as"] = as_
+    if limit is not None:
+        args["limit"] = limit
+    if keep_entities is not None:
+        args["keep_entities"] = keep_entities
+    return backend._value_search(args)
+
+
+@tool(
     name="node_scan",
     status=ToolStatus.EXPERIMENTAL,
     profile=ToolProfile.READONLY,
@@ -4792,6 +4868,76 @@ def tool_compare(
 
 
 @tool(
+    name="scalar_compute",
+    status=ToolStatus.CORE,
+    profile=ToolProfile.READONLY,
+    purpose="Computes arithmetic or reductions over scalar values already present in handles.",
+    description="Computes arithmetic or reductions over scalar values already present in one or more table/scalar handles. Use after project when the answer asks for a numeric difference, sum, min, max, average, absolute difference, or picking the row with the largest/smallest projected value. Do NOT use for graph traversal, entity matching, or grouped counting; build/project the scalar values first.",
+)
+def tool_scalar_compute(
+    backend,
+    inputs: Annotated[
+        Any,
+        ToolParam(
+            "Scalar inputs. Each item identifies a handle and a column, e.g. [{'handle':'h1','column':'year1'}, {'handle':'h2','column':'year2'}]. Optional 'alias' names the input in the output.",
+            schema={
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {"type": "string", "description": "Handle id."},
+                        "column": {
+                            "type": "string",
+                            "description": "Column name from project/fetchable table handle.",
+                        },
+                        "alias": {
+                            "type": "string",
+                            "description": "Optional readable name for this input.",
+                        },
+                        "row_index": {
+                            "type": "integer",
+                            "description": "Optional row index. Default: 0.",
+                        },
+                    },
+                    "required": ["handle", "column"],
+                    "additionalProperties": True,
+                },
+            },
+        ),
+    ],
+    op: Annotated[
+        Any,
+        ToolParam(
+            "Scalar operation to compute.",
+            schema={
+                "type": "string",
+                "enum": [
+                    "difference",
+                    "absolute_difference",
+                    "sum",
+                    "min",
+                    "max",
+                    "avg",
+                    "argmin",
+                    "argmax",
+                ],
+            },
+        ),
+    ],
+    alias: Annotated[
+        Any,
+        ToolParam(
+            "Output column name. Default: 'answer'.", required=False, schema={"type": "string"}
+        ),
+    ] = None,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {"inputs": inputs, "op": op}
+    if alias is not None:
+        args["alias"] = alias
+    return backend._scalar_compute(args)
+
+
+@tool(
     name="fetch",
     status=ToolStatus.CORE,
     profile=ToolProfile.READONLY,
@@ -4826,6 +4972,7 @@ __all__ = [
     "tool_validate_tool_plan",
     "tool_entity_resolve",
     "tool_node_search",
+    "tool_value_search",
     "tool_node_scan",
     "tool_count_nodes",
     "tool_count_handle",
@@ -4851,5 +4998,6 @@ __all__ = [
     "tool_aggregate",
     "tool_project",
     "tool_compare",
+    "tool_scalar_compute",
     "tool_fetch",
 ]

@@ -307,6 +307,7 @@ def _latest_fetchable_handle(transcript: list[dict[str, Any]]) -> str | None:
         "project",
         "relationship_query",
         "shared_role_aggregate",
+        "scalar_compute",
     }
     for step in reversed(transcript):
         action = step.get("action") or {}

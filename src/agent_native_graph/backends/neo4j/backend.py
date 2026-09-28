@@ -3,25 +3,73 @@ import re
 from typing import Any
 
 from neo4j import GraphDatabase, Query
-from neo4j.exceptions import Neo4jError
-from neo4j.graph import Node, Relationship
 
-from agent_native_graph.application.agent_loop import (
-    _evaluation_fetch_all_pages,
-    _guarded_action,
-    _latest_fetchable_handle,
-    _next_action,
-)
-from agent_native_graph.application.neo4j_benchmark import TaskTimeoutError, main
-from agent_native_graph.application.metrics import (
-    _summarize_llm_metrics,
-    _summarize_tool_metrics,
-    _update_summary,
-)
+from agent_native_graph.application.neo4j_benchmark import main
 from agent_native_graph.core.backend import AgentGraphBackend
-from agent_native_graph.core.tool_specs import (
-    _tool_specs,
+from agent_native_graph.core.graph_utils import (
+    _ambiguous_relationship_only_constraints,
+    _as_list,
+    _bool_arg,
+    _bool_arg_default,
+    _columns,
+    _constraint_return_properties,
+    _cypher_filter_clause,
+    _cypher_order_by,
+    _cypher_property_expr,
+    _dedupe_preserve_order,
+    _distinct_projection_vars,
+    _distinct_rows,
+    _distinct_rows_by_selected_entities,
+    _distinctive_entity_search_tokens,
+    _entity_vars,
+    _expand_projected_rows,
+    _handle_entity_vars,
+    _handle_var_labels,
+    _inferred_type,
+    _int_arg,
+    _is_node_payload,
+    _limit_clause,
+    _metric_alias,
+    _metric_expr,
+    _metric_identity,
+    _metric_scalar_value,
+    _node_payload,
+    _normalize_aggregate_select_to_group_by,
+    _normalize_pattern_var_references,
+    _optional_count_source_from_group_by,
+    _pattern_bound_vars,
+    _pattern_var_contexts,
+    _pattern_var_labels,
+    _predicate,
+    _prefer_metric_order_by,
+    _preview,
+    _primary_label,
+    _project_hidden_order_key,
+    _project_order_field,
+    _project_select_fields,
+    _properties_by_label,
+    _properties_by_relationship,
+    _question_features,
+    _relationship_uniqueness_clauses,
+    _return_items,
+    _row_property,
+    _safe_constraint_order_by,
+    _safe_cypher_order_by,
+    _safe_name,
+    _same_target_select_fields,
+    _schema_candidates,
+    _server_side_entity_branches,
+    _shared_role_pattern,
+    _strip_project_hidden_order_keys,
+    _summarize_row,
+    _token_variants,
+    _tokens,
+    _tool_value,
+    _unique_query_var,
+    _validate_filter_binding,
+    _validate_metric_binding,
 )
+from agent_native_graph.core.handle_store import HandleStore
 from agent_native_graph.core.tooling import call_registered_tool
 from agent_native_graph.domain.handles import Handle
 
@@ -46,10 +94,37 @@ class Neo4jGraphBackend(AgentGraphBackend):
         self._schema = schema
         self._query_timeout_s = query_timeout_s
         self._schema_entry = schema_entry
-        self._handles: dict[str, Handle] = {}
-        self._handle_lineage: dict[str, list[dict[str, Any]]] = {}
-        self._counter = 0
+        self._handle_store = HandleStore()
         self.last_fetch: list[list[Any]] | None = None
+
+    def _ensure_handle_store(self) -> HandleStore:
+        if not hasattr(self, "_handle_store"):
+            self._handle_store = HandleStore()
+        return self._handle_store
+
+    @property
+    def _handles(self) -> dict[str, Handle]:
+        return self._ensure_handle_store().handles
+
+    @_handles.setter
+    def _handles(self, value: dict[str, Handle]) -> None:
+        self._ensure_handle_store().handles = value
+
+    @property
+    def _handle_lineage(self) -> dict[str, list[dict[str, Any]]]:
+        return self._ensure_handle_store().lineage
+
+    @_handle_lineage.setter
+    def _handle_lineage(self, value: dict[str, list[dict[str, Any]]]) -> None:
+        self._ensure_handle_store().lineage = value
+
+    @property
+    def _counter(self) -> int:
+        return self._ensure_handle_store().counter
+
+    @_counter.setter
+    def _counter(self, value: int) -> None:
+        self._ensure_handle_store().counter = value
 
     def close(self) -> None:
         self._driver.close()
@@ -63,8 +138,6 @@ class Neo4jGraphBackend(AgentGraphBackend):
         return session.run(statement, **params)
 
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        if not hasattr(self, "_handle_lineage"):
-            self._handle_lineage = {}
         result = self._call_impl(tool, args)
         self._record_handle_lineage(tool, args, result)
         return result
@@ -735,6 +808,74 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 rows.append({var: _node_payload(record["n"]), "__rel_ids": []})
         return self._store(rows, focus=var)
 
+    def _value_search(self, args: dict[str, Any]) -> dict[str, Any]:
+        label = _safe_name(str(args["label"]))
+        prop = _safe_name(str(args["property"]))
+        text = str(args["text"])
+        var = str(args.get("as") or label.lower())
+        limit = _int_arg(args, "limit", 20, min_value=1, max_value=100)
+        match_mode = str(args.get("match_mode") or "auto").lower()
+        keep_entities = _bool_arg(args.get("keep_entities", True))
+        if match_mode not in {"auto", "exact", "iexact", "contains", "prefix", "suffix"}:
+            raise ValueError(
+                "value_search match_mode must be one of: auto, exact, iexact, "
+                "contains, prefix, suffix."
+            )
+
+        query = (
+            f"MATCH (n:`{label}`) "
+            f"WHERE n.`{prop}` IS NOT NULL "
+            f"WITH n, n.`{prop}` AS value, toLower(toString(n.`{prop}`)) AS lowered, "
+            "toLower($text) AS needle "
+            "WITH n, value, "
+            "CASE "
+            "WHEN $match_mode IN ['auto', 'exact'] AND toString(value) = $text THEN 0 "
+            "WHEN $match_mode IN ['auto', 'iexact'] AND lowered = needle THEN 1 "
+            "WHEN $match_mode IN ['auto', 'contains'] AND lowered CONTAINS needle THEN 2 "
+            "WHEN $match_mode = 'prefix' AND lowered STARTS WITH needle THEN 3 "
+            "WHEN $match_mode = 'suffix' AND lowered ENDS WITH needle THEN 4 "
+            "ELSE 99 END AS score "
+            "WHERE score < 99 "
+            "RETURN n, value, score "
+            "ORDER BY score, toString(value) "
+            "LIMIT $limit"
+        )
+        rows: list[dict[str, Any]] = []
+        with self._driver.session() as session:
+            for record in self._run(
+                session,
+                query,
+                text=text,
+                match_mode=match_mode,
+                limit=limit,
+            ):
+                value = record["value"]
+                if keep_entities:
+                    rows.append(
+                        {
+                            var: _node_payload(record["n"]),
+                            "value": value,
+                            "match_score": int(record["score"]),
+                            "__rel_ids": [],
+                        }
+                    )
+                else:
+                    rows.append({"value": value, "match_score": int(record["score"])})
+
+        result = self._store(
+            rows,
+            focus=var if keep_entities else None,
+            kind="rows" if keep_entities else "table",
+            columns=["value", "match_score"],
+        )
+        result["matched_property"] = {"label": label, "property": prop, "text": text}
+        result["planning_hints"] = [
+            "Use the returned value exactly in a later filter when you need a property value.",
+            "If keep_entities=true, the returned handle can also be used directly by expand.",
+            "Use entity_resolve instead when resolving a specific named company/person/place node.",
+        ]
+        return result
+
     def _node_scan(self, args: dict[str, Any]) -> dict[str, Any]:
         label = _safe_name(str(args["label"]))
         var = str(args.get("as") or label.lower())
@@ -1124,8 +1265,6 @@ class Neo4jGraphBackend(AgentGraphBackend):
             query_parts.append(f"WHERE {current_var}.id IN $source_ids")
 
         relationship_filters: list[dict[str, Any]] = []
-        relationship_vars: list[str] = []
-        relationship_vars: list[str] = []
         for index, hop in enumerate(hops):
             rel_type = _safe_name(str(hop["relationship_type"]))
             if rel_type not in set(self._schema["relationship_types"]):
@@ -1204,7 +1343,10 @@ class Neo4jGraphBackend(AgentGraphBackend):
             if var not in contexts:
                 raise ValueError(
                     f"optional_count_by_pattern group_by var {var!r} is not bound. "
-                    f"Available variables: {sorted(contexts)}"
+                    f"Available variables: {sorted(contexts)}. Use one of the "
+                    "available variables in group_by, or add a prior hop that binds "
+                    f"{var!r} before grouping. If you need to count an optional target, "
+                    "put that variable in optional_relationship.as instead of group_by."
                 )
             if contexts[var].get("kind") == "node" and var not in with_vars:
                 with_vars.append(var)
@@ -1261,7 +1403,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         alias = _safe_name(str(args.get("alias") or _metric_alias(args) or "count"))
         count_expr = (
             f"count(DISTINCT {optional_target_var})"
-            if not (args.get("distinct") is False)
+            if args.get("distinct") is not False
             else f"count({optional_target_var})"
         )
         return_items = [
@@ -2956,6 +3098,92 @@ class Neo4jGraphBackend(AgentGraphBackend):
             raise ValueError(f"Unsupported compare op: {op}")
         return self._store(rows, kind="table", columns=[alias])
 
+    def _scalar_compute(self, args: dict[str, Any]) -> dict[str, Any]:
+        inputs = [item for item in _as_list(args.get("inputs")) if isinstance(item, dict)]
+        op = str(args.get("op") or "")
+        alias = str(args.get("alias") or "answer")
+        if not inputs:
+            raise ValueError(
+                "scalar_compute requires at least one input with handle and column. "
+                "Project scalar values first, then call scalar_compute."
+            )
+        if op not in {
+            "difference",
+            "absolute_difference",
+            "sum",
+            "min",
+            "max",
+            "avg",
+            "argmin",
+            "argmax",
+        }:
+            raise ValueError(
+                "Unsupported scalar_compute op. Supported: difference, "
+                "absolute_difference, sum, min, max, avg, argmin, argmax."
+            )
+
+        values: list[dict[str, Any]] = []
+        for index, item in enumerate(inputs):
+            handle_id = str(item.get("handle") or "")
+            column = str(item.get("column") or "")
+            row_index = _int_arg(item, "row_index", 0, min_value=0)
+            if not handle_id or not column:
+                raise ValueError(f"scalar_compute input {index} must include handle and column.")
+            handle = self._handle(handle_id)
+            if row_index >= len(handle.rows):
+                raise ValueError(
+                    f"scalar_compute input {index} row_index={row_index} is out of "
+                    f"range for handle {handle_id} with {len(handle.rows)} rows."
+                )
+            row = handle.rows[row_index]
+            if column not in row:
+                raise ValueError(
+                    f"scalar_compute input {index} column {column!r} is not present "
+                    f"in handle {handle_id}. Available columns: {sorted(row.keys())}."
+                )
+            value = row[column]
+            if not isinstance(value, int | float):
+                raise ValueError(
+                    f"scalar_compute input {index} column {column!r} must be numeric, "
+                    f"got {type(value).__name__}: {value!r}."
+                )
+            values.append(
+                {
+                    "handle": handle_id,
+                    "column": column,
+                    "alias": item.get("alias") or column,
+                    "value": value,
+                }
+            )
+
+        numeric_values = [item["value"] for item in values]
+        if op in {"difference", "absolute_difference"} and len(numeric_values) != 2:
+            raise ValueError(f"scalar_compute op {op!r} requires exactly two numeric inputs.")
+        if op in {"argmin", "argmax"} and not values:
+            raise ValueError(f"scalar_compute op {op!r} requires at least one input.")
+
+        if op == "difference":
+            answer = numeric_values[0] - numeric_values[1]
+        elif op == "absolute_difference":
+            answer = abs(numeric_values[0] - numeric_values[1])
+        elif op == "sum":
+            answer = sum(numeric_values)
+        elif op == "min":
+            answer = min(numeric_values)
+        elif op == "max":
+            answer = max(numeric_values)
+        elif op == "avg":
+            answer = sum(numeric_values) / len(numeric_values)
+        elif op == "argmin":
+            answer = min(values, key=lambda item: item["value"])["alias"]
+        else:
+            answer = max(values, key=lambda item: item["value"])["alias"]
+
+        result = self._store([{alias: answer}], kind="table", columns=[alias])
+        result["scalar_compute"] = {"op": op, "inputs": values}
+        result["finalization_hint"] = "This scalar result is ready to fetch as the final answer."
+        return result
+
     def _validate_compare_operand(
         self,
         *,
@@ -3041,47 +3269,13 @@ class Neo4jGraphBackend(AgentGraphBackend):
         columns: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        self._counter += 1
-        handle_id = f"h{self._counter}"
-        handle = Handle(
-            id=handle_id,
-            rows=rows,
+        return self._ensure_handle_store().store(
+            rows,
             focus=focus,
             kind=kind,
-            columns=list(columns or []),
-            metadata=dict(metadata or {}),
+            columns=columns,
+            metadata=metadata,
         )
-        self._handles[handle_id] = handle
-        result = {
-            "handle": handle_id,
-            "kind": kind,
-            "focus": focus,
-            "entity_variables": _handle_entity_vars(rows),
-            "columns": list(columns or []),
-            "matched_count": len(rows),
-            "preview": _preview(rows, focus=focus, columns=columns),
-            "truncated": len(rows) > 10,
-        }
-        if result["entity_variables"]:
-            result["composition_hint"] = (
-                "This handle still contains entity variables and can be used by "
-                "expand, entity_set_operation, count_handle, group_handle, or project. "
-                f"Use entity variables: {result['entity_variables']}."
-            )
-        elif kind == "table":
-            result["composition_hint"] = (
-                "This handle is scalar/table-shaped. It is safe to fetch as a final "
-                "answer or aggregate as a table, but not for expand/entity_set_operation. "
-                "For later graph/set work, keep an entity handle and project only after "
-                "the graph/set operation, or use project with keep_entities=true."
-            )
-        if len(rows) >= 1000:
-            result["large_result_hint"] = (
-                "This handle is large or may be capped by the tool limit. Do not fetch it "
-                "for count/grouped-summary questions; call count_handle, group_handle, "
-                "project, or a more specific server-side graph query first."
-            )
-        return result
 
     def _guard_large_handle_input(
         self,
@@ -3150,20 +3344,10 @@ class Neo4jGraphBackend(AgentGraphBackend):
         return seed_var
 
     def _handle(self, handle_id: str) -> Handle:
-        if handle_id not in self._handles:
-            available = self._available_handle_summaries()
-            raise ValueError(
-                f"Unknown handle: {handle_id}. Available handles: {available}. "
-                "Use one of these exact handle ids, or call handle_recap on an "
-                "available handle before project/fetch/entity_set_operation."
-            )
-        return self._handles[handle_id]
+        return self._ensure_handle_store().get(handle_id)
 
     def _first_row(self, handle_id: str) -> dict[str, Any]:
-        handle = self._handle(handle_id)
-        if not handle.rows:
-            raise ValueError(f"Handle {handle_id} is empty")
-        return handle.rows[0]
+        return self._ensure_handle_store().first_row(handle_id)
 
     def _record_handle_lineage(
         self,
@@ -3171,41 +3355,13 @@ class Neo4jGraphBackend(AgentGraphBackend):
         args: dict[str, Any],
         result: dict[str, Any],
     ) -> None:
-        handle_id = result.get("handle")
-        if not isinstance(handle_id, str) or handle_id not in self._handles:
-            return
-        parent_ids = [item for item in _extract_handle_refs(args) if item in self._handles]
-        lineage: list[dict[str, Any]] = []
-        seen_steps: set[str] = set()
-        for parent_id in parent_ids:
-            for step in self._handle_lineage.get(parent_id, []):
-                step_key = json.dumps(step, ensure_ascii=False, sort_keys=True)
-                if step_key not in seen_steps:
-                    lineage.append(step)
-                    seen_steps.add(step_key)
-        step = {
-            "tool": tool,
-            "args": _compact_tool_args(args),
-            "parents": parent_ids,
-            "produced": self._handle_summary(handle_id),
-        }
-        lineage.append(step)
-        self._handle_lineage[handle_id] = lineage[-24:]
+        self._ensure_handle_store().record_lineage(tool, args, result)
 
     def _available_handle_summaries(self) -> list[dict[str, Any]]:
-        return [self._handle_summary(handle_id) for handle_id in sorted(self._handles)]
+        return self._ensure_handle_store().available_summaries()
 
     def _handle_summary(self, handle_id: str) -> dict[str, Any]:
-        handle = self._handles[handle_id]
-        return {
-            "handle": handle.id,
-            "kind": handle.kind,
-            "focus": handle.focus,
-            "row_count": len(handle.rows),
-            "entity_variables": _handle_entity_vars(handle.rows),
-            "columns": handle.columns or _columns(handle.rows),
-            "preview": _preview(handle.rows, focus=handle.focus, columns=handle.columns)[:3],
-        }
+        return self._ensure_handle_store().summary(handle_id)
 
 
 def _coerce_filter_value(value: Any, value_type: Any) -> Any:
@@ -3215,36 +3371,6 @@ def _coerce_filter_value(value: Any, value_type: Any) -> Any:
     if normalized_type == "integer":
         return int(value)
     return value
-
-
-def _node_payload(node: Any) -> dict[str, Any]:
-    return {
-        "labels": sorted(node.labels),
-        "properties": {str(key): _tool_value(value) for key, value in dict(node).items()},
-    }
-
-
-def _tool_value(value: Any) -> Any:
-    if isinstance(value, Node):
-        return _node_payload(value)
-    if isinstance(value, Relationship):
-        return {
-            "id": value.element_id,
-            "type": value.type,
-            "start": value.start_node.element_id,
-            "end": value.end_node.element_id,
-            "properties": {str(key): _tool_value(item) for key, item in dict(value).items()},
-        }
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    if isinstance(value, list):
-        return [_tool_value(item) for item in value]
-    if isinstance(value, tuple):
-        return [_tool_value(item) for item in value]
-        return value
-
-
-from agent_native_graph.core.graph_utils import *  # noqa: F403 - re-export private compatibility helpers.
 
 
 if __name__ == "__main__":

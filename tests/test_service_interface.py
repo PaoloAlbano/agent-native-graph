@@ -2,8 +2,8 @@ from typing import Any
 
 
 def test_service_backend_introspects_schema_when_no_schema_file(monkeypatch) -> None:
-    from agent_native_graph.backends.neo4j import introspection
     from agent_native_graph.backends.neo4j import backend as backend_entrypoint
+    from agent_native_graph.backends.neo4j import introspection
     from agent_native_graph.interfaces import service
 
     calls: dict[str, Any] = {}

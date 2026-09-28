@@ -5,20 +5,26 @@ from typing import Any
 
 import pytest
 
-from agent_native_graph.backends.neo4j.backend import (
-    Neo4jGraphBackend,
-    Handle,
-    _ambiguous_relationship_only_constraints,
+from agent_native_graph.application.agent_loop import (
     _evaluation_fetch_all_pages,
     _guarded_action,
     _latest_fetchable_handle,
     _next_action,
-    _predicate,
-    _relationship_uniqueness_clauses,
+)
+from agent_native_graph.application.metrics import (
     _summarize_llm_metrics,
     _summarize_tool_metrics,
-    _tool_specs,
+    classify_failure,
 )
+from agent_native_graph.backends.neo4j.backend import Neo4jGraphBackend
+from agent_native_graph.core.graph_utils import (
+    _ambiguous_relationship_only_constraints,
+    _predicate,
+    _relationship_uniqueness_clauses,
+)
+from agent_native_graph.core.handle_store import HandleStore
+from agent_native_graph.core.tool_specs import _tool_specs
+from agent_native_graph.domain.handles import Handle
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +39,22 @@ def planning_backend(schema: dict[str, Any]) -> Any:
     tool_backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
     tool_backend._schema = schema
     return tool_backend
+
+
+def test_handle_store_tracks_handles_and_lineage() -> None:
+    store = HandleStore()
+    parent = store.store(
+        [{"company": {"shape": "entity", "labels": ["Company"], "properties": {"name": "A"}}}],
+        focus="company",
+    )
+    child = store.store([{"name": "A"}], kind="table", columns=["name"])
+
+    store.record_lineage("project", {"from": parent["handle"]}, child)
+
+    assert store.get(parent["handle"]).focus == "company"
+    assert store.first_row(child["handle"]) == {"name": "A"}
+    assert store.available_summaries()[0]["handle"] == parent["handle"]
+    assert store.lineage[child["handle"]][0]["parents"] == [parent["handle"]]
 
 
 def test_draft_tool_plan_is_schema_driven_for_or_count_question(planning_backend: Any) -> None:
@@ -171,6 +193,48 @@ def test_tool_dispatch_ignores_unexpected_model_arguments(schema: dict[str, Any]
     )
 
     assert "labels" in overview
+
+
+def test_tool_specs_include_value_search_and_scalar_compute() -> None:
+    names = {
+        spec["function"]["name"]
+        for spec in _tool_specs(enable_planning_tools=True, schema_entry="overview")
+    }
+
+    assert "value_search" in names
+    assert "scalar_compute" in names
+
+
+def test_classify_failure_detects_common_agent_failures() -> None:
+    assert (
+        classify_failure(
+            {
+                "matches_answer_json": False,
+                "ok": False,
+                "error": "JSONDecodeError: Expecting value",
+                "transcript": [],
+            }
+        )
+        == "json_decode"
+    )
+    assert (
+        classify_failure(
+            {
+                "matches_answer_json": False,
+                "ok": True,
+                "error": None,
+                "transcript": [
+                    {
+                        "result": {
+                            "status": "tool_error",
+                            "error": "ValueError: Unknown handle: h99",
+                        }
+                    }
+                ],
+            }
+        )
+        == "unknown_handle"
+    )
 
 
 def test_schema_search_returns_ready_to_use_relationship_args(schema: dict[str, Any]) -> None:
@@ -2194,6 +2258,51 @@ def fetch_rows(backend: Any, handle: str, *, limit: int = 1000, offset: int = 0)
     return backend.call("fetch", {"from": handle, "limit": limit, "offset": offset})["rows"]
 
 
+def test_scalar_compute_difference_without_neo4j(schema: dict[str, Any]) -> None:
+    tool_backend = Neo4jGraphBackend.__new__(Neo4jGraphBackend)
+    tool_backend._schema = schema
+    tool_backend._handles = {}
+    tool_backend._handle_lineage = {}
+    tool_backend._counter = 0
+
+    left = tool_backend._store([{"year": 2000}], kind="table", columns=["year"])
+    right = tool_backend._store([{"year": 1997}], kind="table", columns=["year"])
+
+    result = tool_backend.call(
+        "scalar_compute",
+        {
+            "inputs": [
+                {"handle": left["handle"], "column": "year", "alias": "On2 Technologies"},
+                {"handle": right["handle"], "column": "year", "alias": "LaCie"},
+            ],
+            "op": "difference",
+            "alias": "year_difference",
+        },
+    )
+
+    assert fetch_rows(tool_backend, result["handle"]) == [[3]]
+    assert result["finalization_hint"]
+
+
+def test_value_search_finds_real_industry_values(backend: Any) -> None:
+    result = backend.call(
+        "value_search",
+        {
+            "label": "Industry",
+            "property": "name",
+            "text": "bank",
+            "match_mode": "contains",
+            "as": "industry",
+            "limit": 10,
+        },
+    )
+
+    rows = fetch_rows(backend, result["handle"], limit=10)
+    values = {row[0] for row in rows}
+    assert any("bank" in str(value).lower() for value in values)
+    assert "industry" in result["entity_variables"]
+
+
 def test_schema_tools_expose_company_graph_affordances(backend: Any) -> None:
     inspected = backend.call("schema_inspect", {})
     assert {"schema", "affordance"} == set(inspected)
@@ -2296,6 +2405,7 @@ def test_unknown_handle_error_lists_available_handles(backend: Any) -> None:
     assert "Unknown handle: h999" in message
     assert company["handle"] in message
     assert "entity_variables" in message
+    assert "never predict the id of a future tool result" in message
 
 
 def test_handle_recap_reports_lineage_and_available_handles(backend: Any) -> None:

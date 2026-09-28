@@ -105,6 +105,33 @@ def _summarize_tool_metrics(transcript: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def classify_failure(row: dict[str, Any]) -> str | None:
+    """Classify benchmark failures without changing execution behavior."""
+    if row.get("matches_answer_json"):
+        return None
+    error = str(row.get("error") or "")
+    transcript = row.get("transcript") or []
+    tool_errors: list[str] = []
+    for step in transcript:
+        result = step.get("result") if isinstance(step, dict) else None
+        if isinstance(result, dict) and result.get("status") == "tool_error":
+            tool_errors.append(str(result.get("error") or ""))
+    combined = "\n".join([error, *tool_errors]).lower()
+    if "jsondecodeerror" in combined:
+        return "json_decode"
+    if "transactiontimedout" in combined or "timeout" in combined:
+        return "backend_timeout"
+    if "unknown handle" in combined:
+        return "unknown_handle"
+    if "not bound" in combined or "unbound" in combined:
+        return "unbound_variable"
+    if "must be numeric" in combined or "unsupported scalar_compute" in combined:
+        return "scalar_compute_error"
+    if not row.get("ok"):
+        return "no_final_fetch_or_max_steps"
+    return "semantic_mismatch"
+
+
 def _update_summary(summary: dict[str, Any], row: dict[str, Any]) -> None:
     summary["total"] += 1
     summary["tool_success"] += int(bool(row["ok"]))
@@ -137,3 +164,7 @@ def _update_summary(summary: dict[str, Any], row: dict[str, Any]) -> None:
     summary["repeated_targeted_schema_calls"] = summary.get(
         "repeated_targeted_schema_calls", 0
     ) + int(tool_summary.get("repeated_targeted_schema_calls") or 0)
+    failure_class = row.get("failure_class")
+    if failure_class:
+        key = f"failure_{failure_class}"
+        summary[key] = summary.get(key, 0) + 1

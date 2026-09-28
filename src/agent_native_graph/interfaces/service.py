@@ -56,7 +56,7 @@ def _load_current_research_backend() -> Any:
     uri = os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
     user = os.getenv("NEO4J_USER", "neo4j")
     password = os.getenv("NEO4J_PASSWORD", "password")
-    query_timeout_s = int(os.getenv("ANA_NEO4J_QUERY_TIMEOUT_S", "20"))
+    query_timeout_s = int(os.getenv("ANA_NEO4J_QUERY_TIMEOUT_S", "30"))
     schema_path_value = os.getenv("ANA_SCHEMA_JSON")
     if schema_path_value:
         schema_path = Path(schema_path_value)
