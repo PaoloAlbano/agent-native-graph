@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@@HEADING@@ | ANA Company results</title>
+  <meta name="description" content="Explore complete ANA Company runs: answers, errors and recorded tool trajectories for all 347 questions.">
+  <link rel="stylesheet" href="assets/site.css">
+  <link rel="stylesheet" href="assets/results.css">
+  @@SCRIPTS@@
+</head>
+<body data-run-index="@@RUN_INDEX@@">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header"><a class="wordmark" href="index.html" aria-label="ANA home"><span class="logo-symbol" aria-hidden="true">a<span>n</span>a</span><span class="wordmark-caption">Agent-Native APIs</span></a>
+  <nav class="primary-nav" aria-label="Research sections"><a href="index.html#approach"><span>01</span> Approach & tools</a><a class="active" href="results.html" aria-current="page"><span>02</span> ANA results</a><a href="comparison.html"><span>03</span> Comparison</a></nav>
+  <a class="repository-link" href="https://github.com/PaoloAlbano/agent-native-graph">Repository ↗</a>
+</header>
+<main id="main" class="results-main">
+  <section class="results-intro"><p class="eyebrow">02 / ANA results</p><h1>@@HEADING@@</h1>
+    <p class="hero-description">347 questions. Every answer, every recorded operation. Explore how each model navigates the graph, and where its trajectory succeeds or fails.</p>
+    <p>These are complete runs on the CypherBench Company test slice. Repeated runs remain separate; scores are not pooled or cherry-picked.</p>
+  </section>
+  @@MODEL_NAV@@
+  <section aria-labelledby="runs-heading"><h2 id="runs-heading">The runs.</h2>
+    <div class="results-table"><table><thead><tr><th>Model / date</th><th>Temperature</th><th>Reasoning requested</th><th>Correct</th><th>Execution OK</th><th>Execution not OK</th><th>Mean LLM calls</th><th>Mean tool calls</th></tr></thead><tbody>@@RUN_ROWS@@</tbody></table></div>
+    <div class="metric-guide"><h3>How to read these numbers</h3>
+      <p><strong>Correct</strong> is the archived <code>matches_answer_json</code> result against the benchmark answer. <strong>Execution OK</strong> is the archived runner flag <code>ok</code>, not a correctness guarantee. A run can finish and still return the wrong answer. Individual tool errors can also be recovered before completion.</p>
+      <p>Call means use all 347 questions, including failures. Reasoning is the requested configuration, not proof of what a provider executed. Counts and archive checksums are validated during the site build; answers are not re-scored by this website.</p>
+      <p>Known gold-data caveat: two questions involving null birth-date ordering did not reproduce the stored gold answer during validation. Scores here remain unchanged. <a href="https://github.com/PaoloAlbano/agent-native-graph/blob/main/results/cypherbench-company/gold-validation.md">Gold validation</a> · <a href="https://github.com/PaoloAlbano/agent-native-graph/blob/main/docs/benchmark-protocol.md">Benchmark protocol</a></p>
+    </div>
+  </section>
+  @@EXPLORER@@
+  <footer><p><strong>Source, not a second archive.</strong> Benchmark writers save to <code>results/</code>. This site builds a read-only presentation in <code>docs/</code>; details are loaded only when selected. Tool contracts in section 1 describe current code and may differ from a historical run.</p><a href="index.html">Back to the approach & tool catalog</a></footer>
+</main>
+</body>
+</html>

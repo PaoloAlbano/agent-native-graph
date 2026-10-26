@@ -1,4 +1,4 @@
-from analyze_tool_quality import _suspicious_tools, _tool_metrics
+from agent_native_graph.research.analyze_tool_quality import _suspicious_tools, _tool_metrics
 
 
 def test_tool_metrics_counts_call_level_signals() -> None:

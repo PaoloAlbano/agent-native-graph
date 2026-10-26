@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Agent-Native APIs: designing data access around LLM agents. Explore the approach through a knowledge graph case study, recorded tool calls, and parameter contracts.">
+  <meta name="color-scheme" content="light">
+  <title>Agent-Native APIs · Approach & tools</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <script defer src="assets/site.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="wordmark" href="#approach" aria-label="ANA home"><span class="logo-symbol" aria-hidden="true">a<span>n</span>a</span><span class="wordmark-caption">Agent-Native APIs</span></a>
+    <nav class="primary-nav" aria-label="Research sections">
+      <a class="active" href="#approach" aria-current="page"><span>01</span> Approach & tools</a>
+      <a href="results.html"><span>02</span> ANA results</a>
+      <a href="comparison.html"><span>03</span> Comparison</a>
+    </nav>
+    <a class="repository-link" href="https://github.com/PaoloAlbano/agent-native-graph">Repository ↗</a>
+  </header>
+
+  <main id="main">
+    <section id="approach" class="hero page-width" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="signal-dot" aria-hidden="true"></span> Research prototype / 01</p>
+        <h1 id="hero-title">Data access,<br>designed for <em>agents.</em></h1>
+        <p class="hero-lead">What if we designed the interface around how an LLM works with data?</p>
+        <p class="hero-description">Agent-Native APIs are an approach to designing data access around the needs of LLM agents. We start with knowledge graphs as a case study; the same design principles can guide interfaces to SQL databases, document stores, and other data services.</p>
+        <div class="hero-actions"><a class="button" href="#tool-catalog">Explore the tools <span aria-hidden="true">↓</span></a><a class="text-link" href="#how-it-works">Follow an example →</a></div>
+      </div>
+      <aside class="research-note" aria-labelledby="research-question">
+        <p class="eyebrow">The research question</p>
+        <h2 id="research-question">A better interface,<br>a better trajectory?</h2>
+        <p>Formal query languages give humans precise control over data. ANA asks whether operations designed for agents can help models produce more reliable answers.</p>
+        <div class="note-rule"></div>
+        <p class="note-label">Current case study</p>
+        <p class="note-value">Knowledge graphs · Neo4j</p>
+        <p class="note-foot">The broader hypothesis extends to structured data access, including SQL. Evidence in this repository currently concerns CypherBench Company.</p>
+      </aside>
+    </section>
+
+    <div class="facts page-width" aria-label="Current implementation">
+      <div><strong>@@DEFAULT_COUNT@@</strong><span>tools in the default profile</span></div>
+      <div><strong>@@GROUP_COUNT@@</strong><span>families of operations</span></div>
+      <div><strong>Handles</strong><span>server-side intermediate state</span></div>
+      <div><strong>Neo4j</strong><span>current execution backend</span></div>
+    </div>
+
+    <div class="reading-layout page-width">
+      <aside class="on-this-page">
+        <p class="eyebrow">On this page</p>
+        <nav aria-label="Approach contents">
+          <a href="#idea">The idea</a>
+          <a href="#design-principles">Design principles</a>
+          <a href="#how-it-works">A composed answer</a>
+          <a href="#tool-catalog">Tool reference</a>
+          <a href="#research-scope">Evidence & scope</a>
+        </nav>
+        <p class="margin-note">ANA describes the interface.<br>The model still chooses<br>the operations.</p>
+      </aside>
+
+      <div class="reading-body">
+        <section id="idea" class="editorial-section" aria-labelledby="idea-title">
+          <p class="eyebrow">The idea</p>
+          <h2 id="idea-title">Make the steps explicit.</h2>
+          <p class="section-lead">Accessing data involves several decisions: what information is available, how it relates, what to filter, and what to return.</p>
+          <p>ANA exposes these decisions as tool calls with named parameters and inspectable intermediate results. The model can use the result of one operation to choose the next. Our first implementation studies this approach on knowledge graphs, where text-to-Cypher expresses those decisions as a formal query.</p>
+          <div class="comparison-pair">
+            <article><p class="eyebrow">Text-to-query</p><h3>Compose a query</h3><p>Question + schema → generated Cypher → database result.</p><p class="small-text">Correction loops can revise the query after execution or feedback.</p></article>
+            <article class="ana-path"><p class="eyebrow">Agent-native access</p><h3>Compose operations</h3><p>Question → discovery → graph operations → answer handle → rows.</p><p class="small-text">Each step has a contract and can produce state for later calls.</p></article>
+          </div>
+          <p>The backend executes the graph operations. The agent is responsible for choosing their sequence and interpreting the results. A successful tool call can still be part of an incorrect answer, so both execution and answer correctness need evaluation.</p>
+        </section>
+
+        <section id="design-principles" class="editorial-section" aria-labelledby="principles-title">
+          <p class="eyebrow">Interface design</p>
+          <h2 id="principles-title">Four decisions that shape the API.</h2>
+          <div class="principles">
+            <article><span class="principle-number">01</span><h3>Discover before composing</h3><p>Schema tools expose labels, properties, directions, and examples. Focused inspection helps the model select the parts relevant to a question.</p></article>
+            <article><span class="principle-number">02</span><h3>Keep intermediate state</h3><p>A handle identifies a server-side result. Later operations consume that handle; the model can inspect its variables, sample, and lineage without receiving every row.</p></article>
+            <article><span class="principle-number">03</span><h3>Make limits visible</h3><p>Traversal caps, row limits, and fetch pagination constrain data movement. Limits differ by operation and are documented in each tool's parameters.</p></article>
+            <article><span class="principle-number">04</span><h3>Design for composition</h3><p>Separate filtering, set operations, grouping, and projection let the agent refine an answer. Descriptions explain when an operation fits and what input it expects.</p></article>
+          </div>
+          <aside class="transport-note"><strong>Where MCP fits.</strong> MCP can expose these tools through a standard protocol. ANA concerns their semantics: the operations, arguments, returned state, and guidance the agent receives. The same logic can be called through other interfaces.</aside>
+        </section>
+
+        <section id="how-it-works" class="editorial-section" aria-labelledby="example-title">
+          <p class="eyebrow">A composed answer</p>
+          <h2 id="example-title">From a question to a handle.</h2>
+          @@EXAMPLE_TRAJECTORY@@
+        </section>
+      </div>
+    </div>
+
+    <section id="tool-catalog" class="catalog-section" aria-labelledby="catalog-title">
+      <div class="page-width">
+        <div class="catalog-intro"><div><p class="eyebrow">The tool reference</p><h2 id="catalog-title">One contract.<br>Every operation.</h2></div>
+          <div><p>@@DEFAULT_COUNT@@ tools are exposed by default. @@OPTIONAL_COUNT@@ additional planning tools can be enabled explicitly. Open a tool to see its LLM-facing description, required arguments, and complete parameter schema.</p><a class="text-link" href="data/tool-catalog.json" download>Download the catalog · JSON ↓</a></div>
+        </div>
+        <p class="catalog-provenance">Generated from the current native tool specifications, including runtime contract overrides. <code>core</code> and <code>experimental</code> are design-status labels; <code>readonly</code> describes graph access. Historical runs may use a different contract revision.</p>
+        <p id="availability-help" class="catalog-provenance"><strong>Availability:</strong> the default profile exposes @@DEFAULT_COUNT@@ tools to the model. <strong>Planning opt-in</strong> adds <code>draft_tool_plan</code> and <code>validate_tool_plan</code> when the runner is started with <code>--enable-planning-tools</code>. This controls which tools the model receives and is independent of its reasoning effort, tool design status, and read permissions.</p>
+        <form class="catalog-controls" aria-label="Filter tool catalog">
+          <div><label for="tool-group">Family</label><select id="tool-group" disabled><option value="all">All families</option>@@GROUP_OPTIONS@@</select></div>
+          <div><label for="tool-status">Status</label><select id="tool-status" disabled><option value="all">All statuses</option><option value="core">Core</option><option value="experimental">Experimental</option></select></div>
+          <div><label for="tool-availability">Availability</label><select id="tool-availability" aria-describedby="availability-help" disabled><option value="all">All public tools</option><option value="default">Default profile</option><option value="opt-in">Planning opt-in</option></select></div>
+        </form>
+        <noscript><p>The complete catalog is available below. Enable JavaScript to filter it.</p></noscript>
+        <div class="catalog-toolbar"><p id="tool-count" role="status" aria-live="polite">@@TOTAL_COUNT@@ tools across @@GROUP_COUNT@@ families</p><button id="reset-filters" type="button" hidden>Clear filters</button></div>
+        <p id="no-tools" class="no-results" hidden>No tools match these filters. Change or clear the filters.</p>
+        <div id="tool-groups">@@TOOL_CATALOG@@</div>
+        <p class="small-text catalog-footnote">Default values and safety caps are reported where the contract documents them. A parameter marked optional can still be required by a particular operation or combination of inputs; consult its description and schema.</p>
+      </div>
+    </section>
+
+    <section id="research-scope" class="page-width evidence-section" aria-labelledby="evidence-title">
+      <p class="eyebrow">The evidence</p><h2 id="evidence-title">From interface design to evaluation.</h2>
+      <p class="section-lead">The next two sections will make the recorded runs explorable, from aggregate scores down to each question's tool sequence.</p>
+      <div class="evidence-grid">
+        <article id="ana-results"><p class="eyebrow">02 / ANA results</p><h3>Company, in full.</h3><p>347 questions. Explore model configurations, answers, failures, and the arguments and results of every recorded tool call.</p><a href="results.html">Explore the complete runs →</a></article>
+        <article id="comparison"><p class="eyebrow">03 / Comparison</p><h3>The same 100 questions.</h3><p>Inspect ANA alongside direct and multi-agent text-to-Cypher on matched Company questions. Original scoring methods are shown separately, not treated as equivalent.</p><a href="comparison.html">Explore the comparison evidence →</a></article>
+      </div>
+      <p class="scope-note">This is an ongoing research prototype. The design principles are hypotheses to evaluate. Current Company runs do not establish generalization to other graphs or SQL systems.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer page-width"><div><a class="footer-brand" href="#approach">Agent-Native APIs</a><p>Rethinking data access for LLM agents.</p></div><nav aria-label="Research resources"><a href="https://github.com/PaoloAlbano/agent-native-graph/tree/main/paper">Paper draft ↗</a><a href="https://github.com/PaoloAlbano/agent-native-graph/blob/main/docs/reproduction.md">Reproduction ↗</a><a href="https://github.com/PaoloAlbano/agent-native-graph/blob/main/docs/benchmark-protocol.md">Benchmark protocol ↗</a></nav></footer>
+</body>
+</html>

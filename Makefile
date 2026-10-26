@@ -1,4 +1,4 @@
-.PHONY: help sync install-mcp format lint test test-backend test-quality test-interfaces load-company benchmark benchmark-temp1 evaluate list-tools paper serve serve-mcp docker-build docker-run clean
+.PHONY: help sync install-mcp format lint test test-backend test-quality test-interfaces prepare-company-tasks load-company export-schema benchmark benchmark-full benchmark-temp1 evaluate archive-result baseline-check baseline-run baseline-archive compare-results list-tools paper docs-build docs-serve serve serve-mcp docker-build docker-run clean
 
 NEO4J_URI ?= bolt://127.0.0.1:7687
 NEO4J_USER ?= neo4j
@@ -9,15 +9,31 @@ API_KEY_FILE ?= /tmp/grapharrow-agent-key
 
 TASKS ?= data/tasks_company_test.jsonl
 SCHEMA_JSON ?= data/company_schema.json
+SCHEMA_PROMPT ?= data/company_schema_prompt.txt
 GRAPH ?= downloads/company_simplekg.json
-OUT ?= results/agent_tools_first100_gpt_oss_120b.jsonl
-OUT_TEMP1 ?= results/agent_tools_first100_gpt_oss_120b_temp1_reasoning.jsonl
-LIMIT ?= 100
+RUN_DIR ?= /tmp/agent-native-graph-runs
+OUT ?= $(RUN_DIR)/agent_tools_benchmark.jsonl
+OUT_TEMP1 ?= $(RUN_DIR)/agent_tools_benchmark_temp1_reasoning.jsonl
+BENCHMARK ?= cypherbench-company
+LIMIT ?= 347
+FULL_LIMIT ?= 347
+TEMPERATURE ?= 0
+REASONING ?= none
+THINKING ?= 0
+THINKING_EFFORT ?= medium
 MAX_TOKENS ?= 16000
 MAX_STEPS ?= 12
 CONCURRENCY ?= 3
+RESUME ?= 0
 BATCH_SIZE ?= 2000
 DOCKER_IMAGE ?= agent-native-graph
+REFERENCE_REPO ?= ../multigraphrag
+REEXECUTION_OUT ?= $(RUN_DIR)/query-reexecution
+REFERENCE_PYTHON ?= $(REFERENCE_REPO)/.venv/bin/python
+BASELINE_MODE ?= direct
+BASELINE_OUT ?= $(RUN_DIR)/baseline_$(BASELINE_MODE)_$(subst /,_,$(MODEL))_temp$(TEMPERATURE)_reasoning_$(REASONING)_n$(FULL_LIMIT).jsonl
+COMPARISON_OUT ?= $(RUN_DIR)/comparison/cypherbench-company.md
+DOCS_PORT ?= 8000
 
 help:
 	@echo "Agent-Native Graph targets"
@@ -27,12 +43,23 @@ help:
 	@echo "  make format           Format Python code with ruff"
 	@echo "  make lint             Check Python code with ruff"
 	@echo "  make test             Run all current unit tests"
+	@echo "  make prepare-company-tasks  Build data/tasks_company_test.jsonl from CypherBench"
 	@echo "  make load-company     Clear/load the CypherBench company graph into Neo4j"
-	@echo "  make benchmark        Run temp=0 ANA benchmark"
+	@echo "  make export-schema    Export the loaded Company graph schema for benchmarking"
+	@echo "  make benchmark        Run ANA benchmark with configurable model/profile"
+	@echo "  make benchmark-full   Run ANA benchmark on the full company split"
 	@echo "  make benchmark-temp1  Run temp=1 + thinking medium ANA benchmark"
 	@echo "  make evaluate         Evaluate OUT with deterministic answer_json scoring"
+	@echo "  make archive-result   Archive full runs in results/; diagnostics in .local-results/"
+	@echo "  make baseline-check   Verify reference tasks, graph and Neo4j without LLM calls"
+	@echo "  make baseline-run     Run direct/single/agentic reference mode on Company"
+	@echo "  make baseline-archive Archive a complete reference run in .local-results/"
+	@echo "  make compare-results  Diagnose matched ANA, direct and agentic runs locally"
+	@echo "  make reexecute-reference  Re-score pinned baseline queries without LLM calls"
 	@echo "  make list-tools       Print the ANA tool catalog"
 	@echo "  make paper            Print the paper/preprint table of contents"
+	@echo "  make docs-build       Generate the research website and tool reference"
+	@echo "  make docs-serve       Build and preview the website on localhost:$(DOCS_PORT)"
 	@echo "  make serve            Run the experimental HTTP service"
 	@echo "  make serve-mcp        Run the experimental MCP service"
 	@echo "  make docker-build     Build service image"
@@ -41,6 +68,9 @@ help:
 	@echo "Common overrides:"
 	@echo "  MODEL=$(MODEL)"
 	@echo "  LIMIT=$(LIMIT)"
+	@echo "  TEMPERATURE=$(TEMPERATURE)"
+	@echo "  THINKING=$(THINKING)"
+	@echo "  RUN_DIR=$(RUN_DIR)"
 	@echo "  OUT=$(OUT)"
 
 install:
@@ -52,12 +82,13 @@ install-mcp:
 	@uv sync --extra dev --extra service --extra mcp
 
 format:
-	@uv run ruff format src/agent_native_graph
+	@uv run ruff format src/agent_native_graph tests
 
 lint:
-	@uv run ruff check src/agent_native_graph --exclude src/agent_native_graph/backends/neo4j/backend.py
+	@uv run ruff check src/agent_native_graph tests
 
-test: test-backend test-quality test-interfaces
+test:
+	@uv run pytest tests -q
 
 test-backend:
 	@uv run pytest tests/test_agent_tool_backend.py -q
@@ -68,8 +99,15 @@ test-quality:
 test-interfaces:
 	@uv run pytest tests/test_mcp_interface.py -q
 
+prepare-company-tasks:
+	@uv run --with datasets --with pandas --with pyarrow agent-native-graph prepare-company-tasks \
+	  --from-hf \
+	  --graph company \
+	  --split test \
+	  --out "$(TASKS)"
+
 load-company:
-	@uv run python scripts/load_simplekg_neo4j.py \
+	@uv run agent-native-graph load-company \
 	  --neo4j-uri "$(NEO4J_URI)" \
 	  --neo4j-user "$(NEO4J_USER)" \
 	  --neo4j-password "$(NEO4J_PASSWORD)" \
@@ -77,8 +115,22 @@ load-company:
 	  --clear \
 	  --batch-size "$(BATCH_SIZE)"
 
+export-schema:
+	@uv run agent-native-graph export-schema \
+	  --neo4j-uri "$(NEO4J_URI)" \
+	  --neo4j-user "$(NEO4J_USER)" \
+	  --neo4j-password "$(NEO4J_PASSWORD)" \
+	  --out "$(SCHEMA_PROMPT)" \
+	  --json-out "$(SCHEMA_JSON)"
+
 benchmark:
-	@uv run agent-native-graph benchmark-neo4j \
+	@mkdir -p "$(dir $(OUT))"
+	@if [ "$(THINKING)" = "1" ]; then \
+	  THINKING_ARGS="--enable-thinking --thinking-effort $(THINKING_EFFORT)"; \
+	else \
+	  THINKING_ARGS=""; \
+	fi; \
+	uv run agent-native-graph benchmark-neo4j \
 	  --neo4j-uri "$(NEO4J_URI)" \
 	  --neo4j-user "$(NEO4J_USER)" \
 	  --neo4j-password "$(NEO4J_PASSWORD)" \
@@ -90,40 +142,82 @@ benchmark:
 	  --out "$(OUT)" \
 	  --limit "$(LIMIT)" \
 	  --native-tools \
+	  --tool-choice auto \
+	  --temperature "$(TEMPERATURE)" \
 	  --max-tokens "$(MAX_TOKENS)" \
 	  --max-steps "$(MAX_STEPS)" \
 	  --concurrency "$(CONCURRENCY)" \
-	  --evaluation-fetch-all-pages
+	  --evaluation-fetch-all-pages \
+	  $(if $(filter 1,$(RESUME)),--resume,) \
+	  $$THINKING_ARGS
+
+benchmark-full:
+	@$(MAKE) benchmark LIMIT="$(FULL_LIMIT)"
 
 benchmark-temp1:
-	@uv run agent-native-graph benchmark-neo4j \
-	  --neo4j-uri "$(NEO4J_URI)" \
-	  --neo4j-user "$(NEO4J_USER)" \
-	  --neo4j-password "$(NEO4J_PASSWORD)" \
-	  --base-url "$(BASE_URL)" \
+	@$(MAKE) benchmark OUT="$(OUT_TEMP1)" TEMPERATURE=1 THINKING=1 REASONING=medium THINKING_EFFORT=medium
+
+evaluate:
+	@uv run agent-native-graph evaluate-run --run "$(OUT)"
+
+archive-result:
+	@uv run agent-native-graph archive-result \
+	  --run "$(OUT)" \
+	  --benchmark "$(BENCHMARK)" \
 	  --model "$(MODEL)" \
-	  --api-key-file "$(API_KEY_FILE)" \
-	  --tasks "$(TASKS)" \
-	  --schema-json "$(SCHEMA_JSON)" \
-	  --out "$(OUT_TEMP1)" \
 	  --limit "$(LIMIT)" \
-	  --native-tools \
-	  --temperature 1 \
-	  --enable-thinking \
-	  --thinking-effort medium \
+	  --temperature "$(TEMPERATURE)" \
+	  --reasoning "$(REASONING)" \
+	  --tool-mode native \
+	  --tool-choice auto \
 	  --max-tokens "$(MAX_TOKENS)" \
 	  --max-steps "$(MAX_STEPS)" \
 	  --concurrency "$(CONCURRENCY)" \
-	  --evaluation-fetch-all-pages
+	  --delete-source
 
-evaluate:
-	@uv run python scripts/evaluate_run.py --run "$(OUT)"
+baseline-check:
+	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
+	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
+	  --out "$(BASELINE_OUT)" --check-only
+
+baseline-run:
+	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
+	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
+	  --out "$(BASELINE_OUT)" --model "$(MODEL)" --base-url "$(BASE_URL)" \
+	  --api-key-file "$(API_KEY_FILE)" --neo4j-uri "$(NEO4J_URI)" \
+	  --neo4j-user "$(NEO4J_USER)" --neo4j-password "$(NEO4J_PASSWORD)" \
+	  --temperature "$(TEMPERATURE)" --reasoning "$(REASONING)" \
+	  --max-tokens "$(MAX_TOKENS)" --concurrency "$(CONCURRENCY)" \
+	  --limit "$(FULL_LIMIT)" $(if $(filter 1,$(RESUME)),--resume,)
+
+baseline-archive:
+	@uv run agent-native-graph baseline-archive --run "$(BASELINE_OUT)"
+
+compare-results:
+	@test -n "$(ANA_RUN)" -a -n "$(DIRECT_RUN)" -a -n "$(AGENTIC_RUN)" || \
+	  (echo "Set ANA_RUN, DIRECT_RUN and AGENTIC_RUN to archived run directories" && exit 1)
+	@uv run agent-native-graph compare-results \
+	  --ana "$(ANA_RUN)" --direct "$(DIRECT_RUN)" \
+	  --agentic "$(AGENTIC_RUN)" --out "$(COMPARISON_OUT)"
+
+.PHONY: reexecute-reference
+reexecute-reference:
+	@uv run python -m agent_native_graph.research.reexecute_reference \
+	  --reference-repo "$(REFERENCE_REPO)" --graph "$(GRAPH)" \
+	  --neo4j-uri "$(NEO4J_URI)" --neo4j-user "$(NEO4J_USER)" \
+	  --neo4j-password "$(NEO4J_PASSWORD)" --out "$(REEXECUTION_OUT)"
 
 list-tools:
 	@uv run agent-native-graph tools
 
 paper:
 	@sed -n '1,120p' paper/README.md
+
+docs-build:
+	@uv run agent-native-graph build-docs --reference-repo "$(REFERENCE_REPO)"
+
+docs-serve: docs-build
+	@uv run python -m http.server "$(DOCS_PORT)" --bind 127.0.0.1 --directory docs
 
 serve:
 	@NEO4J_URI="$(NEO4J_URI)" \

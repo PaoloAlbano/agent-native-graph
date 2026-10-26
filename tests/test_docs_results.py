@@ -1,0 +1,184 @@
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from agent_native_graph.research.docs_results import ARCHIVE, publish_results, read_runs
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def archive(root, run_id="test-run", question="Question", size=347):
+    folder = root / ARCHIVE / run_id
+    folder.mkdir(parents=True)
+    records = [
+        {
+            "qid": f"q-{i}",
+            "nl_question": question,
+            "gold_cypher": "RETURN 1",
+            "expected": [[1]],
+            "rows": [[1]],
+            "ok": True,
+            "matches_answer_json": True,
+            "llm_call_count": 2,
+            "tool_call_count": 2,
+            "transcript": [
+                {"action": {"tool": "fetch", "args": {"from": "h1"}}, "result": {"rows": [[1]]}}
+            ],
+        }
+        for i in range(size)
+    ]
+    payload = "".join(json.dumps(r) + "\n" for r in records).encode()
+    (folder / "run.jsonl").write_bytes(payload)
+    manifest = {
+        "run_id": run_id,
+        "run_sha256": hashlib.sha256(payload).hexdigest(),
+        "category": "company",
+        "suite": "full",
+        "model": "test-model",
+        "created_at": "2026-10-26",
+        "temperature": 0,
+        "reasoning": "none",
+        "source_file": "/private/local/path.jsonl",
+    }
+    summary = {
+        "run_id": run_id,
+        "total": size,
+        "ok": size,
+        "matches": size,
+        "accuracy": 1,
+        "avg_llm_calls": 2,
+        "avg_tool_calls": 2,
+    }
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+    (folder / "summary.json").write_text(json.dumps(summary))
+    return folder, records
+
+
+def test_publish_preserves_records_and_sources_and_escapes_html(tmp_path):
+    folder, records = archive(tmp_path, question="<script>alert(1)</script>")
+    manifest_path = folder / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["model"] = '<script>alert("model")</script>'
+    manifest_path.write_text(json.dumps(manifest))
+    sources = tmp_path / "docs/site"
+    sources.mkdir(parents=True)
+    (sources / "results.template.html").write_text(
+        (ROOT / "docs/site/results.template.html").read_text()
+    )
+    (sources / "run-explorer.html").write_text((ROOT / "docs/site/run-explorer.html").read_text())
+    before = {p: p.read_bytes() for p in folder.iterdir()}
+    output = tmp_path / "site"
+    page = publish_results(tmp_path, output, "https://example.com/repo")
+    index = json.loads((output / "data/results/index.json").read_text())
+    published = index["runs"][0]
+    assert "source_file" not in published["config"]
+    assert "questions" not in published
+    run_index = json.loads((output / published["question_index"]).read_text())
+    assert len(run_index["questions"]) == 347
+    q = next(q for q in run_index["questions"] if q["qid"] == records[0]["qid"])
+    assert json.loads((output / q["detail"]).read_text()) == records[0]
+    assert "transcript" not in q  # Large traces are lazy-loaded, not in the index.
+    assert '<script>alert("model")</script>' not in page
+    assert "&lt;script&gt;" in page
+    assert "Temperature 0" in page
+    assert "Reasoning none" in page
+    assert '<div class="metric-guide"><h3>How to read these numbers</h3>' in page
+    assert '<details class="metric-guide"' not in page
+    run_page = (output / published["page"]).read_text()
+    assert 'placeholder="Filter by QID"' in run_page
+    assert 'class="question-table"' in run_page
+    assert "<script" not in page
+    assert 'class="question-table"' not in page
+    assert 'class="explorer-layout"' not in page
+    assert before == {p: p.read_bytes() for p in folder.iterdir()}
+
+
+def test_checksum_mismatch_is_rejected(tmp_path):
+    folder, _ = archive(tmp_path)
+    with (folder / "run.jsonl").open("a") as stream:
+        stream.write("\n")
+    with pytest.raises(ValueError, match="Checksum"):
+        read_runs(tmp_path)
+
+
+def test_summary_mismatch_is_rejected(tmp_path):
+    folder, _ = archive(tmp_path)
+    path = folder / "summary.json"
+    summary = json.loads(path.read_text())
+    summary["matches"] -= 1
+    path.write_text(json.dumps(summary))
+    with pytest.raises(ValueError, match="Summary matches"):
+        read_runs(tmp_path)
+
+
+def test_incomplete_runs_are_rejected(tmp_path):
+    archive(tmp_path, size=100)
+    with pytest.raises(ValueError, match="347 unique"):
+        read_runs(tmp_path)
+
+
+def test_duplicate_qids_are_rejected_even_with_a_valid_checksum(tmp_path):
+    folder, records = archive(tmp_path)
+    records[-1] = records[0]
+    payload = "".join(json.dumps(r) + "\n" for r in records).encode()
+    (folder / "run.jsonl").write_bytes(payload)
+    path = folder / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["run_sha256"] = hashlib.sha256(payload).hexdigest()
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="347 unique"):
+        read_runs(tmp_path)
+
+
+def test_different_questions_cannot_be_compared(tmp_path):
+    archive(tmp_path, "run-a")
+    archive(tmp_path, "run-b", question="Different question")
+    with pytest.raises(ValueError, match="Question/gold mismatch"):
+        read_runs(tmp_path)
+
+
+def test_actual_archive_summary_and_qids_are_consistent():
+    runs = read_runs(ROOT)
+    assert len(runs) >= 4
+    assert all(len(r["records"]) == 347 for r in runs)
+
+
+def test_model_pages_group_runs_and_link_to_the_question_explorer(tmp_path):
+    archive(tmp_path, "run-a")
+    archive(tmp_path, "run-b")
+    folder, _ = archive(tmp_path, "run-c")
+    path = folder / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["model"] = "another/model"
+    path.write_text(json.dumps(manifest))
+    sources = tmp_path / "docs/site"
+    sources.mkdir(parents=True)
+    (sources / "results.template.html").write_text(
+        (ROOT / "docs/site/results.template.html").read_text()
+    )
+    (sources / "run-explorer.html").write_text((ROOT / "docs/site/run-explorer.html").read_text())
+    output = tmp_path / "site"
+    overview = publish_results(tmp_path, output, "https://example.com/repo")
+    pages = list(output.glob("model-*.html"))
+    assert len(pages) == 2
+    entries = json.loads((output / "data/results/index.json").read_text())["runs"]
+    assert len(list(output.glob("run-*.html"))) == 3
+    for page in pages:
+        html = page.read_text()
+        assert page.name in overview
+        assert "@@" not in html
+        assert 'href="results.html"' in html
+        assert "<script" not in html
+        assert 'id="question-list"' not in html
+        for entry in entries:
+            model = entry["config"]["model"]
+            belongs = f"<h1>{model}</h1>" in html
+            assert (entry["page"] in html) == belongs
+    for entry in entries:
+        run_html = (output / entry["page"]).read_text()
+        assert f'data-run-index="{entry["question_index"]}"' in run_html
+        assert 'id="question-list"' in run_html
+        assert "assets/results.js" in run_html
+        assert entry["page"] in overview

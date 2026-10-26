@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@@TITLE@@ | ANA comparison</title>
+<link rel="stylesheet" href="assets/site.css"><link rel="stylesheet" href="assets/results.css">
+@@SCRIPTS@@
+</head><body data-comparison="@@DATA@@">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="wordmark" href="index.html"><span class="logo-symbol" aria-hidden="true">a<span>n</span>a</span><span class="wordmark-caption">Agent-Native APIs</span></a>
+<nav class="primary-nav" aria-label="Research sections"><a href="index.html"><span>01</span> Approach & tools</a><a href="results.html"><span>02</span> ANA results</a><a class="active" href="comparison.html" aria-current="page"><span>03</span> Comparison</a></nav>
+</header>
+<main id="main" class="results-main">
+<p class="eyebrow">03 / Company · the same 100 questions</p><h1>@@TITLE@@</h1>
+<aside class="recording-note"><strong>Query correctness and textual-answer judging are different metrics.</strong>
+Original source scores retain their original evaluators. Where available, a separately labelled common metric scores saved baseline queries re-executed on the verified ANA graph. It does not re-evaluate final textual answers. Token budgets, concurrency, dates and schema prompts still differ; the external historical graph snapshot is not documented.</aside>
+@@CONTENT@@
+<footer><p>Generated documentation only. ANA archives remain in <code>results/</code>; external evidence is read from a pinned Git commit, never copied into ANA's benchmark archive.</p></footer>
+</main></body></html>

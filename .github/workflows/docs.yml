@@ -1,0 +1,94 @@
+name: Research website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "results/**"
+      - "src/agent_native_graph/**"
+      - "tests/test_docs_site.py"
+      - "tests/test_docs_results.py"
+      - "tests/test_docs_comparison.py"
+      - "tests/test_docs_reexecution.py"
+      - "tests/test_reexecute_reference.py"
+      - "data/reference_company100_qids.json"
+      - "tests/docs_results_ui.test.cjs"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "results/**"
+      - "src/agent_native_graph/**"
+      - "tests/test_docs_site.py"
+      - "tests/test_docs_results.py"
+      - "tests/test_docs_comparison.py"
+      - "tests/test_docs_reexecution.py"
+      - "tests/test_reexecute_reference.py"
+      - "data/reference_company100_qids.json"
+      - "tests/docs_results_ui.test.cjs"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --extra dev
+      - name: Read pinned comparison source
+        id: reference
+        run: python -c 'import json; d=json.load(open("docs/site/comparison-source.json")); print("repository="+d["repository"]); print("commit="+d["commit"])' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.reference.outputs.repository }}
+          ref: ${{ steps.reference.outputs.commit }}
+          path: build/reference
+          persist-credentials: false
+      - name: Validate catalog and site generation
+        run: uv run pytest tests/test_docs_site.py tests/test_docs_results.py tests/test_docs_comparison.py tests/test_docs_reexecution.py tests/test_reexecute_reference.py -q
+      - name: Check browser script
+        run: |
+          node --check docs/site/site.js
+          node --check docs/site/results.js
+          node --check docs/site/results-ui.js
+          node --check docs/site/comparison.js
+          node --test tests/docs_results_ui.test.cjs
+      - name: Build static site
+        run: uv run agent-native-graph build-docs --out build/site --reference-repo build/reference
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: build/site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4

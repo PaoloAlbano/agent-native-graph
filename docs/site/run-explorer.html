@@ -1,0 +1,15 @@
+<section class="explorer" aria-labelledby="explorer-heading">
+  <p class="eyebrow">Inspect this run</p><h2 id="explorer-heading">All 347 questions.</h2>
+  <div class="explorer-controls">
+    <label>Current run<select id="run-a" disabled></select></label>
+    <label>Compare with<select id="run-b" disabled></select></label>
+    <label>QID<input id="question-search" type="search" placeholder="Filter by QID" disabled></label>
+    <label>Outcome in this run<select id="outcome" disabled><option value="all">All questions</option><option value="correct">Correct</option><option value="mismatch">Executed, answer mismatch</option><option value="error">Execution not OK</option><option value="different">Different correctness across A / B</option></select></label>
+    <label>Failure class<select id="failure" disabled><option value="all">All classes</option></select></label>
+  </div>
+  <p id="load-status" role="status">Loading this run's question index…</p>
+  <noscript><p>Enable JavaScript to inspect individual questions. The run summary and source archives are accessible without it.</p></noscript>
+  <p>All questions are listed below. Open a row to inspect its answer and tool sequence. Only one question is expanded at a time.</p>
+  <div class="question-table-wrap"><table class="question-table"><thead><tr><th scope="col">Question / QID</th><th scope="col">Result</th><th scope="col">LLM calls</th><th scope="col">Tool calls</th><th scope="col">Details</th></tr></thead><tbody id="question-list"></tbody></table></div>
+  <div id="question-detail" aria-live="polite" hidden></div>
+</section>

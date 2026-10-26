@@ -1,0 +1,11 @@
+{
+  "run_id": "2026-10-24_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_company_ana_gptoss120_temp1_medium_current_n347",
+  "qid": "dac46171-f5ec-4da4-9b64-b16c50231cd5",
+  "guide_notes": [
+    "Discover the graph vocabulary and the direction of the subsidiaryOf relationship.",
+    "Resolve the named subsidiary. The returned handle contains the selected entity under the variable subsidiary; alternative candidates are separate suggestions.",
+    "Follow subsidiaryOf outward from the subsidiary to its parent company. The new handle retains both entity variables.",
+    "Select the parent company's name. The resulting table handle contains answer values and no longer carries entity variables.",
+    "Fetch the final table. This answer fits on one page and matches the benchmark's expected rows."
+  ]
+}
