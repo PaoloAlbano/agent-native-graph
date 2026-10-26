@@ -16,6 +16,45 @@ In this project we study that idea on the `company` slice of CypherBench, compar
 
 MCP can expose tools to agents, but it does not say how those tools should be shaped. ANA is the design layer: it asks which operations should exist, how they should be bounded, how schema discovery should work, how intermediate state should be represented, and how an agent can safely compose graph operations without materializing huge result sets.
 
+## Research Website
+
+Preview the static research website from the repository root:
+
+```bash
+make docs-serve
+```
+
+Open <http://127.0.0.1:8000>. Use `DOCS_PORT=8001` to select another port.
+`make docs-build` regenerates the site without starting a server. Rebuild and
+refresh the browser after changing the content or tool definitions.
+
+The first section explains ANA and documents every currently exposed tool,
+including its effective LLM description, required parameters, nested schemas,
+and Python source. The catalog is generated from code. The second section,
+`results.html`, explores all 347 Company questions across complete ANA runs:
+scores, outcome filters, golden queries, answers, tool sequences, handle links,
+and side-by-side run comparisons. The third section (`comparison.html`) pairs
+the same 100 Company QIDs with the pinned Multi-Agent GraphRAG repository,
+with separate profile and question pages. ANA exact-answer scores and external
+LLM-judge scores are explicitly different metrics. A separate table uses saved
+baseline query re-executions and the same exact-result comparator as ANA.
+See the [comparison and contributor workflow](docs/multigraphrag-comparison.md).
+Results are grouped by model, with dedicated static model pages and direct
+links to a separate static page for each run. Overview and model pages require
+no JavaScript or benchmark-data downloads. Only a run page loads its question
+index and the selected question's details; this is not a single-page application.
+
+Benchmark writers save to `results/`; the website reads those archives and
+generates a static presentation under `docs/`. It never rewrites the evidence.
+Checksums, question sets and summary counts are checked during the build.
+
+Editable website sources live in [`docs/site/`](docs/site/). The Markdown
+research notes remain in `docs/`; generated HTML, assets, and catalog JSON are
+ignored locally. GitHub Actions validates the site on pull requests and builds
+and deploys it on pushes to `main`. Enable **Settings → Pages → Source → GitHub
+Actions** in GitHub to activate publication. The build requires neither a
+running database nor an LLM API key.
+
 ## Paper / Preprint Draft
 
 The paper-like research narrative lives in [`paper/`](paper/):
@@ -30,7 +69,7 @@ notes, tool contracts, and engineering decisions.
 
 ## Repository layout
 
-- `scripts/`: compatibility and research scripts, dataset loaders, evaluators, and one-off experiment entrypoints.
+- `scripts/`: ignored local fixes, discovery, and historical experiments; not part of the public reproduction workflow.
 - `tests/`: unit tests for the wrapper/tool backend and analysis helpers.
 - `data/`: CypherBench company tasks and schema exports. This is ignored by default because it can be regenerated or replaced.
 - `downloads/`: raw downloaded graph/dataset files. Ignored by default.
@@ -50,10 +89,11 @@ src/agent_native_graph/
   llm_providers/   # model access adapters, starting with OpenAI-compatible APIs
   application/     # benchmark and agent orchestration entrypoints
   interfaces/      # CLI and HTTP/service transport adapters
+  research/        # reproducible Company preparation, baselines, archives, and audits
 ```
 
-Top-level compatibility shims are intentionally kept minimal. New code should
-prefer the package folders above.
+Research commands are exposed through `agent-native-graph`; local `scripts/`
+are not required to reproduce the benchmark.
 
 ## Current Implementation
 
@@ -95,8 +135,9 @@ tools/*.py function
 ```
 
 `tools/load_tool_modules()` imports the modules that contain decorated tools.
-Decorated metadata is the single source of truth for CLI/API contracts, native
-LLM tool specs, and the MCP adapter skeleton.
+Decorated metadata supplies the CLI/API contracts and MCP adapter skeleton.
+Native LLM tool specs additionally pass through the compatibility overrides in
+`core/tool_specs.py`; the website documents that effective model-facing surface.
 
 The refactor has separated the concrete Neo4j adapter, reusable handle storage,
 tool layer, service interface, and benchmark runner. The Neo4j backend is still
@@ -111,9 +152,8 @@ Install dependencies with `uv`:
 uv sync --extra dev --extra service
 ```
 
-The repository is an installable `uv` project. The reusable package lives under
-`src/agent_native_graph`; `scripts/` keeps compatibility shims and research
-utilities. Prefer the packaged CLI for new runs.
+The repository is an installable `uv` project. Reusable code and reproducible
+research commands live under `src/agent_native_graph` and use the packaged CLI.
 
 The common workflow is also available through `make`:
 
@@ -122,6 +162,7 @@ make help
 make sync
 make prepare-company-tasks
 make load-company
+make export-schema
 make benchmark
 make evaluate
 ```
@@ -152,10 +193,16 @@ The raw graph dump itself is not versioned. Place it at
 make load-company
 ```
 
+Export the schema consumed by the benchmark from the loaded graph:
+
+```bash
+make export-schema
+```
+
 Equivalent explicit command:
 
 ```bash
-uv run python scripts/load_simplekg_neo4j.py \
+uv run agent-native-graph load-company \
   --neo4j-uri "$NEO4J_URI" \
   --neo4j-user "$NEO4J_USER" \
   --neo4j-password "$NEO4J_PASSWORD" \
@@ -231,8 +278,34 @@ make evaluate OUT=/tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b
 Equivalent explicit command:
 
 ```bash
-uv run python scripts/evaluate_run.py --run /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b.jsonl
+uv run agent-native-graph evaluate-run --run /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b.jsonl
 ```
+
+## Reference Baselines
+
+The external Multi-Agent GraphRAG implementation can be run through the local
+research harness. Its historical Company trace has 100 questions, whereas
+ANA's full-split behavior analysis has 347. The published query-result comparison
+uses the pinned 100 QIDs and a common evaluator; historical scores from the
+reference repo's judge are not directly comparable with ANA's exact scores.
+See the [comparison scope](docs/multigraphrag-comparison.md).
+
+```bash
+make baseline-check
+make baseline-run BASELINE_MODE=direct MODEL=openai/gpt-oss-120b
+make baseline-run BASELINE_MODE=agentic MODEL=openai/gpt-oss-120b
+```
+
+Set `BASE_URL` and `API_KEY_FILE` for your OpenAI-compatible model gateway.
+Use `RESUME=1` with the same `BASELINE_OUT` after an interrupted run. Archive
+only complete runs with `make baseline-archive BASELINE_OUT=...`. The existing
+347-question baseline archives are retained as historical data, not as the
+100-question comparison. See the [benchmark protocol](docs/benchmark-protocol.md).
+`make baseline-run` currently defaults to 347 cases; it does not reproduce the
+reference repository's 100-case evaluation by itself.
+The archived runs live only in the ignored local `.local-results/baselines/`
+directory. The gold-query check found two Company questions with
+non-reproducible answers.
 
 
 ## Service shape
@@ -276,36 +349,38 @@ Neo4j query timeout defaults to `ANA_NEO4J_QUERY_TIMEOUT_S=30`.
 
 ## Results Hygiene
 
-`results/` is reserved for curated benchmark evidence. The current convention is
-to split complete CypherBench Company runs by suite:
+`results/` contains curated full-split CypherBench Company runs (`limit=347`)
+and separately archived, complete 100-question query re-execution evaluations.
+Diagnostic runs remain outside `results/`, for example under
+`/tmp/agent-native-graph-runs` or the ignored local `.local-results/` archive.
 
-- `full/` for full-split runs, currently `limit=347`;
-- `first100/` for fast comparison runs over the first 100 examples.
+Incomplete, single-case, retry, and debugging outputs should remain outside
+the repository, for example under `/tmp/agent-native-graph-runs`.
 
-Incomplete, single-case, retry, debugging, `first20`, and `first60` outputs
-should remain outside the repository, for example under
-`/tmp/agent-native-graph-runs`, or be deleted once they are no longer needed.
+The [347-question ANA analysis](docs/cypherbench-company-results.md) and the
+[100-question external comparison](docs/multigraphrag-comparison.md)
+are separate research sections, both presented by the generated static site.
 
 Curated runs live under:
 
 ```text
 results/cypherbench-company/
   index.json
-  leaderboard.md
+  gold-validation.jsonl
+  gold-validation.md
+  gold-execution-20261025.jsonl
   full/runs/<run_id>/
-    manifest.json
-    summary.json
-    failures.jsonl
-    run.jsonl
-  first100/runs/<run_id>/
     manifest.json
     summary.json
     failures.jsonl
     run.jsonl
 ```
 
-Every `manifest.json` must include the tested model. Use `make archive-result`
-after a benchmark run to create this structure and refresh the benchmark index.
+The four retained runs have complete model, task-file, graph-dump, and run
+hash metadata. Four earlier runs lacking task and graph hashes were moved to
+the ignored local archive. See the [results format and provenance
+notes](results/README.md). Use `make archive-result` after a benchmark run to
+create this structure and refresh the benchmark index.
 
 Example archive command for a complete full run:
 
@@ -317,12 +392,6 @@ make archive-result \
   REASONING=none \
   CONCURRENCY=5 \
   OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp0_reasoning_none_n347.jsonl
-```
-
-Print the curated leaderboard with:
-
-```bash
-make leaderboard
 ```
 
 The reproducible benchmark protocol is defined in

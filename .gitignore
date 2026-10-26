@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .venv/
 .uv-cache/
 __pycache__/
@@ -14,16 +16,40 @@ build/
 
 # Regenerable or externally hosted benchmark assets.
 downloads/**
-runs/**
 data/*.jsonl
 data/*.json
 data/*.txt
 
 # Keep documentation/manifest files inside ignored data folders.
 !downloads/README.md
-!runs/README.md
 !data/README.md
+!data/reference_company100_qids.json
 
 # `results/` is intentionally versionable for selected, curated evidence.
 
+# Historical benchmark runs kept locally for investigation only.
+.local-results/
+
 .vscode/
+
+# Scratch scripts for local fixes and research exploration.
+scripts/
+
+# Static website outputs, regenerated locally or by GitHub Actions.
+docs/index.html
+docs/assets/site.css
+docs/assets/site.js
+docs/data/tool-catalog.json
+docs/data/example-trajectory.json
+docs/.nojekyll
+# Generated results presentation; benchmark archives remain in results/.
+docs/results.html
+docs/model-*.html
+docs/run-*.html
+docs/comparison*.html
+docs/assets/comparison.js
+docs/data/comparison/
+docs/assets/results.css
+docs/assets/results.js
+docs/assets/results-ui.js
+docs/data/results/

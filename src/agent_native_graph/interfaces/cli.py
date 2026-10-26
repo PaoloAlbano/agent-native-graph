@@ -1,10 +1,35 @@
 """Command-line entrypoint for the Agent-Native Graph wrapper."""
 
 import argparse
+import importlib
 import sys
+
+RESEARCH_COMMANDS = {
+    "build-docs": "build_docs",
+    "prepare-company-tasks": "prepare_cypherbench",
+    "load-company": "load_simplekg_neo4j",
+    "export-schema": "export_schema_prompt",
+    "run-gold": "run_gold_neo4j",
+    "evaluate-run": "evaluate_run",
+    "archive-result": "archive_result",
+    "baseline-run": "run_reference_baseline",
+    "baseline-archive": "archive_reference_baseline",
+    "compare-results": "compare_company_results",
+    "audit-execution": "audit_execution_accuracy",
+    "audit-failures": "audit_failures",
+    "audit-score-cap": "audit_score_cap",
+    "compare-replicates": "compare_replicates",
+    "analyze-tool-quality": "analyze_tool_quality",
+}
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in RESEARCH_COMMANDS:
+        module_name = RESEARCH_COMMANDS[sys.argv[1]]
+        sys.argv = [f"{sys.argv[0]} {sys.argv[1]}", *sys.argv[2:]]
+        importlib.import_module(f"agent_native_graph.research.{module_name}").main()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "benchmark-neo4j":
         from agent_native_graph.runner import run_neo4j_tools_benchmark
 
@@ -21,6 +46,8 @@ def main() -> None:
         "benchmark-neo4j",
         help="Run the current CypherBench/Neo4j ANA tool benchmark runner.",
     )
+    for command in RESEARCH_COMMANDS:
+        subparsers.add_parser(command, help=f"Run the {command} research workflow.")
     args = parser.parse_args()
 
     if args.command == "tools":

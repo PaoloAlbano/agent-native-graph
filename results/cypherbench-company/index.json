@@ -1,0 +1,54 @@
+[
+  {
+    "accuracy": 0.8530259365994236,
+    "avg_llm_calls": 5.2017291066282425,
+    "avg_tool_calls": 5.2017291066282425,
+    "executable_rate": 0.9827089337175793,
+    "limit": 347,
+    "model": "openai/gpt-oss-120b",
+    "path": "full/runs/2026-10-24_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_company_ana_gptoss120_temp0_none_current_n347",
+    "reasoning": "none",
+    "run_id": "2026-10-24_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_company_ana_gptoss120_temp0_none_current_n347",
+    "suite": "full",
+    "temperature": 0.0
+  },
+  {
+    "accuracy": 0.8414985590778098,
+    "avg_llm_calls": 5.219020172910663,
+    "avg_tool_calls": 5.207492795389049,
+    "executable_rate": 0.968299711815562,
+    "limit": 347,
+    "model": "openai/gpt-oss-120b",
+    "path": "full/runs/2026-10-24_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_company_ana_gptoss120_temp1_medium_current_n347",
+    "reasoning": "medium",
+    "run_id": "2026-10-24_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_company_ana_gptoss120_temp1_medium_current_n347",
+    "suite": "full",
+    "temperature": 1.0
+  },
+  {
+    "accuracy": 0.8386167146974063,
+    "avg_llm_calls": 5.089337175792507,
+    "avg_tool_calls": 5.089337175792507,
+    "executable_rate": 0.9971181556195965,
+    "limit": 347,
+    "model": "openai/gpt-oss-120b",
+    "path": "full/runs/2026-10-25_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_company_gptoss120_temp0_repeat2_n347",
+    "reasoning": "none",
+    "run_id": "2026-10-25_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_company_gptoss120_temp0_repeat2_n347",
+    "suite": "full",
+    "temperature": 0.0
+  },
+  {
+    "accuracy": 0.8472622478386167,
+    "avg_llm_calls": 6.020172910662824,
+    "avg_tool_calls": 6.020172910662824,
+    "executable_rate": 0.9913544668587896,
+    "limit": 347,
+    "model": "Qwen/Qwen3.5-27B",
+    "path": "full/runs/2026-10-25_qwen-qwen3.5-27b_temp0_reasoning-none_tools-native_n347_qwen35_temp0_full_n347",
+    "reasoning": "none",
+    "run_id": "2026-10-25_qwen-qwen3.5-27b_temp0_reasoning-none_tools-native_n347_qwen35_temp0_full_n347",
+    "suite": "full",
+    "temperature": 0.0
+  }
+]

@@ -1,56 +1,40 @@
-# CypherBench Company Results
+# ANA on CypherBench Company (347 Questions)
 
-This repository focuses on the `company` graph/category from the CypherBench test split.
+This page describes ANA's behavior on the complete `company` test split. It is
+not a comparison with Multi-Agent GraphRAG. That comparison has a separate
+[100-question protocol](multigraphrag-comparison.md).
 
-The current deterministic metric is execution accuracy against CypherBench `answer_json`. We also track technical success, tool-call count, LLM token usage, and tool errors.
+## Evidence
 
-## Status
+The four retained complete ANA runs are under
+[`results/cypherbench-company/full/runs/`](../results/cypherbench-company/full/runs/).
+Each run has a manifest, all 347 per-question records, a summary, and the
+non-matching cases. [`index.json`](../results/cypherbench-company/index.json)
+lists their model, profile, and score. The October runs have complete task,
+graph, and run hashes. They are individual observations; concurrency differs
+between the two GPT-OSS temperature-0 runs.
 
-This page is an evidence index for historical investigation runs, not a final
-paper-ready leaderboard. The runs listed here are useful because they document
-what we observed while shaping the ANA tool interface, but they should be
-regenerated before making final claims.
+| Model | Profile | Run date | Exact answers | Executed |
+|---|---|---|---:|---:|
+| GPT-OSS-120B | temp 0, no reasoning | Oct 24 | 296/347 | 341/347 |
+| GPT-OSS-120B | temp 1, medium reasoning | Oct 24 | 292/347 | 336/347 |
+| GPT-OSS-120B | temp 0, no reasoning | Oct 25 | 291/347 | 346/347 |
+| Qwen3.5-27B | temp 0, no reasoning | Oct 25 | 294/347 | 344/347 |
 
-For final comparisons, rerun all approaches with the same:
+`Exact answers` counts row-wise matches to CypherBench `answer_json`.
+`Executed` counts questions without an execution or termination failure; it
+does not imply a correct answer. Scores are observations from individual runs,
+not estimates of model-level variance.
 
-- code revision;
-- CypherBench `company` task subset;
-- loaded graph snapshot;
-- model list;
-- temperature/reasoning profile;
-- max token and max step settings;
-- scoring implementation.
+## Interpreting Failures
 
-Curated JSONL run files live in `results/`. Raw exploratory logs should stay in
-`runs/` and are not intended to be referenced as stable evidence.
+The [`gold-validation` report](../results/cypherbench-company/gold-validation.md)
+shows that the stored gold Cypher executes for all 347 questions but reproduces
+`answer_json` for only 345 on this Neo4j graph. Keep all 347 in the primary
+denominator and report the 345-case sensitivity analysis separately.
 
-## Historical Representative Agent-Native Runs
-
-| Run file | Model | Profile | Examples | Correct | Technical success | Avg tool calls |
-|---|---:|---|---:|---:|---:|---:|
-| `results/agent_tools_first100_gpt_oss_120b_optional_fix_c5_temp0_maxtokens16k_steps12.jsonl` | `openai/gpt-oss-120b` | temp 0 | 100 | 86 | 98 | 5.00 |
-| `results/agent_tools_first100_gpt_oss_120b_optional_fix_c5_temp1_thinking_medium_maxtokens16k_steps12.jsonl` | `openai/gpt-oss-120b` | temp 1 + thinking medium | 100 | 87 | 98 | 4.91 |
-| `results/agent_tools_first100_gemma_4_31b_it_clean_reload_c3_temp1_thinking_medium_retry8_maxtokens16k_steps12.jsonl` | `google/gemma-4-31B-it` | temp 1 + thinking medium | 100 | 90 | 100 | 5.20 |
-| `results/agent_tools_first100_qwen3_6_27b_clean_reload_c1_temp0_retry8_maxtokens16k_steps12.jsonl` | `Qwen/Qwen3.6-27B` | temp 0 | 100 | 86 | 98 | 6.06 |
-| `results/agent_tools_first100_qwen3_5_397b_a17b_clean_reload_c3_temp1_thinking_medium_retry8_maxtokens16k_steps12_nosandbox.jsonl` | `Qwen/Qwen3.5-397B-A17B` | temp 1 + thinking medium | 100 | 87 | 100 | n/a |
-| `results/agent_tools_first100_qwen3_5_27b_clean_reload_c1_temp0_retry8_maxtokens16k_steps12.jsonl` | `Qwen/Qwen3.5-27B` | temp 0 | 100 | 71 | 85 | 6.62 |
-
-These are research runs, not final claims. Some variance remains even at temperature 0 because hosted model/tool-call behavior can still change across runs.
-
-## Baselines
-
-The repository includes runners for:
-
-- zero-shot text-to-Cypher;
-- multi-agent text-to-Cypher correction;
-- Multi-Agent GraphRAG-style text-to-Cypher;
-- gold Cypher execution on Neo4j.
-
-The next step is to consolidate comparable baseline tables from the external run repository and align them with the same `company` subset, model list, limit, and scoring code.
-
-## Current interpretation
-
-The historical runs suggest that the agent-native approach can be competitive
-on this slice without dataset-specific tools. The best observed results cluster
-in the high 80s to around 90/100 on the first 100 examples. This interpretation
-should be treated as provisional until the comparison suite is rerun end-to-end.
+The full per-question `run.jsonl` files, including tool trajectories and error
+classes, are the source for deeper analysis. A first
+[methodology and failure audit](methodology-audit.md) records known scoring and
+repeatability caveats. This section should be expanded from those records,
+without conflating it with the 100-question external comparison.
