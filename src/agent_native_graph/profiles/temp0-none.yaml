@@ -1,0 +1,18 @@
+# Low-temperature run with thinking requested off.
+temperature: 0.0
+max_tokens: 16000
+# null keeps the provider default and omits the option from the request.
+top_p: null
+seed: null
+presence_penalty: null
+frequency_penalty: null
+stop: null
+enable_thinking: false
+thinking_effort: null
+retry_low_effort_on_length: true
+tool_choice: auto
+# Client-side transport policy, not fields sent to the model.
+timeout_s: 60.0
+max_attempts: 3
+retry_base_s: 2.0
+rate_limit_retry_s: 30.0

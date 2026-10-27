@@ -95,6 +95,43 @@ def test_publish_preserves_records_and_sources_and_escapes_html(tmp_path):
     assert before == {p: p.read_bytes() for p in folder.iterdir()}
 
 
+def test_standard_run_config_is_validated(tmp_path):
+    folder, _ = archive(tmp_path)
+    manifest_path = folder / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(
+        concurrency=3,
+        max_tokens=16000,
+        max_steps=12,
+        tool_mode="native",
+        tool_choice="auto",
+        configuration_sha256="frozen-config",
+    )
+    payload = json.dumps(
+        {
+            k: manifest[k]
+            for k in (
+                "model",
+                "temperature",
+                "reasoning",
+                "concurrency",
+                "max_tokens",
+                "max_steps",
+                "tool_mode",
+                "tool_choice",
+                "configuration_sha256",
+            )
+        }
+    ).encode()
+    (folder / "run-config.json").write_bytes(payload)
+    manifest["run_config_sha256"] = hashlib.sha256(payload).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    assert len(read_runs(tmp_path)) == 1
+    (folder / "run-config.json").write_text("{}")
+    with pytest.raises(ValueError, match="configuration checksum"):
+        read_runs(tmp_path)
+
+
 def test_checksum_mismatch_is_rejected(tmp_path):
     folder, _ = archive(tmp_path)
     with (folder / "run.jsonl").open("a") as stream:

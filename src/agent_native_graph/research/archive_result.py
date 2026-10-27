@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import json
 import re
 import shutil
@@ -9,6 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from agent_native_graph.application.run_config import (
+    config_path,
+    file_hash,
+    load_config,
+    public_config,
+    validate_results,
+)
 from agent_native_graph.research_common import read_jsonl, write_jsonl
 
 
@@ -16,29 +22,59 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--benchmark", default="cypherbench-company")
-    parser.add_argument("--model", required=True)
-    parser.add_argument("--provider", default="openai-compatible")
-    parser.add_argument("--limit", type=int, default=347)
+    parser.add_argument("--model")
+    parser.add_argument("--provider")
+    parser.add_argument("--limit", type=int)
     parser.add_argument("--temperature", type=float)
-    parser.add_argument("--reasoning", default="none")
-    parser.add_argument("--tool-mode", default="native")
-    parser.add_argument("--tool-choice", default="auto")
-    parser.add_argument("--max-tokens", type=int, default=16000)
-    parser.add_argument("--max-steps", type=int, default=12)
+    parser.add_argument("--reasoning")
+    parser.add_argument("--tool-mode")
+    parser.add_argument("--tool-choice")
+    parser.add_argument("--max-tokens", type=int)
+    parser.add_argument("--max-steps", type=int)
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--notes", default="")
+    parser.add_argument("--run-label", help="Unique replica label; defaults to the raw filename")
     parser.add_argument("--delete-source", action="store_true")
     parser.add_argument("--root", type=Path, default=Path("results"))
     parser.add_argument("--tasks-file", type=Path, default=Path("data/tasks_company_test.jsonl"))
     parser.add_argument("--graph-file", type=Path, default=Path("downloads/company_simplekg.json"))
     args = parser.parse_args()
 
+    if args.run.with_suffix(".lock").exists():
+        raise ValueError("The run is active or has a stale lock; do not archive it yet")
     rows = read_jsonl(args.run)
+    config = load_config(config_path(args.run)) if config_path(args.run).exists() else None
+    defaults = {
+        "model": None,
+        "provider": "openai-compatible",
+        "limit": 347,
+        "temperature": None,
+        "reasoning": "none",
+        "tool_mode": "native",
+        "tool_choice": "auto",
+        "max_tokens": 16000,
+        "max_steps": 12,
+        "concurrency": None,
+    }
+    for field, default in defaults.items():
+        value = config[field] if config else default
+        supplied = getattr(args, field)
+        if config and supplied is not None and supplied != value:
+            raise ValueError(f"--{field.replace('_', '-')} contradicts the saved run configuration")
+        setattr(args, field, value if supplied is None else supplied)
+    if not args.model:
+        parser.error("Legacy output has no metadata: specify --model and the original profile")
     if len(rows) != args.limit:
         raise SystemExit(
             f"Refusing to archive incomplete run: {args.run} has {len(rows)} rows, "
             f"expected {args.limit}."
         )
+
+    if config:
+        validate_results(rows, config)
+        args.run_label = args.run_label or config["created_at"]
+    else:
+        validate_run_rows(rows, args.limit, args.tasks_file)
 
     run_id = _run_id(args)
     suite = _suite(args.limit)
@@ -51,7 +87,9 @@ def main() -> None:
         raise SystemExit(f"Destination already exists: {destination}")
     shutil.copy2(args.run, destination)
 
-    manifest = _manifest(args, run_id, destination, rows)
+    if config:
+        _write_json(run_dir / "run-config.json", public_config(config))
+    manifest = _manifest(args, run_id, destination, rows, config)
     summary = _summary(rows, run_id)
     failures = [_failure_record(row) for row in rows if not row.get("matches_answer_json")]
 
@@ -69,7 +107,7 @@ def main() -> None:
 
 def _run_id(args: argparse.Namespace) -> str:
     date = datetime.now(UTC).strftime("%Y-%m-%d")
-    variant = _run_variant(args.run.stem)
+    variant = _run_variant(args.run_label or args.run.stem)
     return "_".join(
         [
             date,
@@ -100,6 +138,21 @@ def _suite(limit: int) -> str:
     return f"n{limit}"
 
 
+def validate_run_rows(rows: list[dict], limit: int, tasks_file: Path) -> None:
+    """Reject duplicate/missing QIDs and results from a different task set."""
+    qids = [row.get("qid") for row in rows]
+    if (
+        len(rows) != limit
+        or any(not isinstance(qid, str) or not qid for qid in qids)
+        or len(set(qids)) != limit
+    ):
+        raise ValueError("Run must contain exactly the expected number of unique, nonempty QIDs")
+    if tasks_file.exists():
+        tasks = read_jsonl(tasks_file)[:limit]
+        if len(tasks) != limit or {task["qid"] for task in tasks} != set(qids):
+            raise ValueError("Run QIDs differ from the selected task set")
+
+
 def _archive_root(root: Path, limit: int) -> Path:
     if limit != 347 and root == Path("results"):
         return Path(".local-results")
@@ -111,6 +164,7 @@ def _manifest(
     run_id: str,
     destination: Path,
     rows: list[dict[str, Any]],
+    config: dict | None = None,
 ) -> dict[str, Any]:
     return {
         "run_id": run_id,
@@ -130,13 +184,31 @@ def _manifest(
         "concurrency": args.concurrency,
         "limit": args.limit,
         "suite": _suite(args.limit),
-        "source_file": str(args.run),
+        "source_file": args.run.name if config else str(args.run),
         "run_file": "run.jsonl",
-        "run_sha256": _sha256(destination),
-        "tasks_sha256": _sha256(args.tasks_file) if args.tasks_file.exists() else None,
-        "graph_sha256": _sha256(args.graph_file) if args.graph_file.exists() else None,
-        "git_commit": _git_commit(),
+        "run_sha256": file_hash(destination),
+        "tasks_sha256": config["inputs"]["tasks"]["sha256"]
+        if config
+        else file_hash(args.tasks_file)
+        if args.tasks_file.exists()
+        else None,
+        "graph_sha256": config["inputs"]["graph"]["sha256"]
+        if config
+        else file_hash(args.graph_file)
+        if args.graph_file.exists()
+        else None,
+        "git_commit": config["git_commit"] if config else _git_commit(),
         "notes": args.notes,
+        **(
+            {
+                "configuration_sha256": config["configuration_sha256"],
+                "run_profile": config["profile"],
+                "profile_sha256": config.get("profile_sha256"),
+                "run_config_sha256": file_hash(destination.parent / "run-config.json"),
+            }
+            if config
+            else {}
+        ),
     }
 
 
@@ -193,7 +265,7 @@ def _failure_record(row: dict[str, Any]) -> dict[str, Any]:
 
 def _refresh_index(benchmark_dir: Path) -> None:
     records = []
-    for manifest_path in sorted(benchmark_dir.glob("**/manifest.json")):
+    for manifest_path in sorted(benchmark_dir.glob("full/runs/*/manifest.json")):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         summary_path = manifest_path.with_name("summary.json")
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -220,10 +292,6 @@ def _refresh_index(benchmark_dir: Path) -> None:
 
 def _write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _git_commit() -> str | None:

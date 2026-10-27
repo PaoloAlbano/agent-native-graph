@@ -1,12 +1,11 @@
-# Results Directory
+# Curated Benchmark Evidence
 
-This directory is intentionally versionable.
+This directory contains versioned evidence, not generated website files.
+Browse the [published ANA results](https://paoloalbano.github.io/agent-native-graph/results.html)
+or the [100-QID comparison](https://paoloalbano.github.io/agent-native-graph/comparison.html)
+for an interactive view of the underlying records.
 
-Use it only for curated benchmark evidence that is referenced by documentation.
-Raw exploratory outputs should stay outside the repository, for example under
-`/tmp/agent-native-graph-runs/`.
-
-Current layout:
+## Layout
 
 ```text
 cypherbench-company/
@@ -19,30 +18,44 @@ cypherbench-company/
     summary.json
     failures.jsonl
     run.jsonl
+    run-config.json  # new runs; historical archives retain four files
+  query-reexecution/<evaluation_id>/
+    manifest.json
+    gold.jsonl
+    baseline-*.jsonl
 ```
 
-Keep only complete full-split ANA runs (`limit=347`) in this directory. The
-planned external comparison uses the pinned 100-QID set from the reference
-repository; it is not a static projection currently published here.
-Historical first-100, n20, and four September 28 full runs are kept only in
-the ignored local `.local-results/` archive; new diagnostics belong outside
-`results/` as well.
+## Full ANA Runs
 
-Every `manifest.json` must include the tested `model`, model settings, benchmark
-name, limit, run hash, and git commit. `summary.json` keeps aggregate metrics,
-while `failures.jsonl` keeps only non-matching rows for faster analysis.
-All four retained full runs pass run-hash, QID, summary, and failure-list
-checks. Their manifests also contain task-file and graph-dump hashes matching
-the current local assets. The four September 28 runs lack those provenance
-fields and were moved to the ignored local archive rather than published.
+Curate only complete Company runs with all **347 unique expected QIDs**.
+The manifest identifies model, settings, benchmark, limit, source revision and
+checksums. The summary contains aggregate metrics; `failures.jsonl` contains
+non-matching cases, and `run.jsonl` preserves all per-question records.
 
-Current representative results are summarized in `../docs/cypherbench-company-results.md`.
+New runner outputs have a local `.config.json` sidecar. The archiver uses it to
+validate task contents and save effective model settings, input/code/contract
+hashes and sanitized provenance as `run-config.json`. Do not commit the raw
+sidecar: it includes local input paths. Historical archives are preserved as
+recorded, without inventing missing provenance. A declared historical commit
+alone does not prove the exact uncommitted code used at inference time.
 
-Comparison reports are not curated in `results/`. The planned comparison to
-the reference repository is scoped to its pinned 100 Company QIDs and will
-be presented in `../docs/multigraphrag-comparison.md` once scored consistently.
-Historical 347-question baseline runs are kept only in the ignored local
-`.local-results/baselines/` archive.
+Follow [Contribute a Company Run](../docs/run-standard.md) to launch and archive
+results. Keep incomplete, retry-only, small-sample and exploratory outputs
+outside this archive. The archiver preserves original temporary output.
 
-`index.json` catalogs only full ANA runs. A presentation leaderboard, if needed,
-belongs under `docs/`, not among the raw results.
+## Derived Query Re-executions
+
+`query-reexecution/` stores complete evaluations of saved baseline Cypher,
+not new LLM runs. The evaluation manifest pins source traces, QIDs, graph
+fingerprints, scoring provenance and artifact checksums. Its JSONL files retain
+queries, returned rows, execution errors and exact-match verdicts.
+
+Original external baseline archives remain in the pinned reference repository;
+they are not copied here. Their LLM-judge verdicts and the re-executed exact-result
+scores measure different outputs. See the [comparison protocol](../docs/multigraphrag-comparison.md)
+for reproduction and interpretation limits.
+
+`index.json` catalogs only full ANA runs. The site validates evidence and writes
+its presentation into ignored `build/site/`; it does not change these archives
+or execute new queries/models during the build. Read the
+[methodology caveats](../docs/methodology-audit.md) before comparing scores.

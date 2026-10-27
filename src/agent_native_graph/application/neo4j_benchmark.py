@@ -20,6 +20,17 @@ from agent_native_graph.application.metrics import (
     _update_summary,
     classify_failure,
 )
+from agent_native_graph.application.run_config import (
+    apply_profile,
+    config_path,
+    llm_settings_for_run,
+    new_output,
+    profile_names,
+    result_signature,
+    run_lock,
+    save_config,
+    task_signature,
+)
 from agent_native_graph.core.graph_utils import _requires_wrapper_planning
 from agent_native_graph.core.tool_specs import SCHEMA_ENTRY_MODES
 from agent_native_graph.research_common import (
@@ -46,7 +57,24 @@ def main() -> None:
     add_llm_args(parser)
     parser.add_argument("--tasks", type=Path, required=True)
     parser.add_argument("--schema-json", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Existing path only with --resume; otherwise generated automatically",
+    )
+    parser.add_argument("--run-dir", type=Path, default=Path("/tmp/agent-native-graph-runs"))
+    parser.add_argument(
+        "--profile",
+        choices=profile_names(),
+        help="Name of a YAML file in agent_native_graph/profiles",
+    )
+    parser.add_argument("--provider-tag", default="openai-compatible")
+    parser.add_argument("--graph-file", type=Path, default=Path("downloads/company_simplekg.json"))
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Validate inputs/save metadata, without Neo4j or LLM calls",
+    )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--task-timeout-s", type=int)
@@ -54,7 +82,7 @@ def main() -> None:
     parser.add_argument("--native-tools", action="store_true")
     parser.add_argument(
         "--tool-choice",
-        choices=["auto", "required"],
+        choices=["auto", "required", "none"],
         default="auto",
         help=(
             "Native tool-call selection policy. Use auto for realistic agent runs; "
@@ -99,21 +127,56 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
+    apply_profile(args)
+    if args.concurrency < 1:
+        parser.error("--concurrency must be positive")
+    if args.resume and args.out is None:
+        parser.error("--resume requires the original --out path")
+    args.out = args.out or new_output(args.run_dir, args.model, args.profile)
+    _log(f"OUTPUT {args.out}")
+    with run_lock(args.out):
+        if (args.out.exists() or config_path(args.out).exists()) and not args.resume:
+            raise ValueError("Output already exists; choose a new path or use --resume")
+        tasks = limited_tasks(read_jsonl(args.tasks), args.limit)
+        schema = json.loads(args.schema_json.read_text(encoding="utf-8"))
+        save_config(args, tasks, Path.cwd())
+        if args.resume and args.out.exists():
+            previous = read_jsonl(args.out)
+            selected = {t["qid"]: t for t in tasks}
+            qids = [r["qid"] for r in previous]
+            if len(set(qids)) != len(qids) or not set(qids) <= selected.keys():
+                raise ValueError("Cannot resume results with duplicate or foreign QIDs")
+            if task_signature([selected[qid] for qid in qids]) != result_signature(previous):
+                raise ValueError("Cannot resume results with different task contents")
+        if args.check_only:
+            print(json.dumps({"checked": str(args.out), "inference_started": False}))
+            return
+        if args.profile:
+            _verify_graph(args)
+        _execute(args, tasks, schema)
 
-    tasks = limited_tasks(read_jsonl(args.tasks), args.limit)
+
+def _verify_graph(args) -> None:
+    from neo4j import GraphDatabase
+
+    from agent_native_graph.research.reexecute_reference import database_snapshot, expected_snapshot
+
+    expected = expected_snapshot(args.graph_file)
+    with GraphDatabase.driver(
+        args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+    ) as driver:
+        if database_snapshot(driver, "neo4j") != expected:
+            raise ValueError("Neo4j content differs from the Company graph; no inference started")
+
+
+def _execute(args, tasks: list[dict], schema: dict) -> None:
     done_qids = completed_qids(args.out) if args.resume else set()
-    if args.out.exists() and not args.resume:
-        args.out.unlink()
-    schema = json.loads(args.schema_json.read_text(encoding="utf-8"))
     llm = ChatClient(
         base_url=args.base_url,
         model=args.model,
         api_key_env=args.api_key_env,
         api_key_file=args.api_key_file,
-        enable_thinking=args.enable_thinking,
-        thinking_effort=args.thinking_effort,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
+        settings=llm_settings_for_run(args),
     )
 
     if args.task_timeout_s and args.concurrency <= 1:

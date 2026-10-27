@@ -30,12 +30,18 @@ data/*.txt
 # Historical benchmark runs kept locally for investigation only.
 .local-results/
 
+# Private planning and collaboration notes; not part of the published project.
+.local-notes/
+
+# Local benchmark metadata; only the sanitized run-config.json is published.
+*.config.json
+
 .vscode/
 
 # Scratch scripts for local fixes and research exploration.
 scripts/
 
-# Static website outputs, regenerated locally or by GitHub Actions.
+# Legacy website output locations; new builds use ignored build/site/.
 docs/index.html
 docs/assets/site.css
 docs/assets/site.js

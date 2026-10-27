@@ -7,13 +7,8 @@ on:
       - "docs/**"
       - "results/**"
       - "src/agent_native_graph/**"
-      - "tests/test_docs_site.py"
-      - "tests/test_docs_results.py"
-      - "tests/test_docs_comparison.py"
-      - "tests/test_docs_reexecution.py"
-      - "tests/test_reexecute_reference.py"
+      - "tests/**"
       - "data/reference_company100_qids.json"
-      - "tests/docs_results_ui.test.cjs"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/docs.yml"
@@ -22,13 +17,8 @@ on:
       - "docs/**"
       - "results/**"
       - "src/agent_native_graph/**"
-      - "tests/test_docs_site.py"
-      - "tests/test_docs_results.py"
-      - "tests/test_docs_comparison.py"
-      - "tests/test_docs_reexecution.py"
-      - "tests/test_reexecute_reference.py"
+      - "tests/**"
       - "data/reference_company100_qids.json"
-      - "tests/docs_results_ui.test.cjs"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/docs.yml"
@@ -50,7 +40,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync --locked --extra dev
+      - run: uv sync --locked --extra dev --extra service
       - name: Read pinned comparison source
         id: reference
         run: python -c 'import json; d=json.load(open("docs/site/comparison-source.json")); print("repository="+d["repository"]); print("commit="+d["commit"])' >> "$GITHUB_OUTPUT"
@@ -61,7 +51,11 @@ jobs:
           path: build/reference
           persist-credentials: false
       - name: Validate catalog and site generation
-        run: uv run pytest tests/test_docs_site.py tests/test_docs_results.py tests/test_docs_comparison.py tests/test_docs_reexecution.py tests/test_reexecute_reference.py -q
+        run: uv run pytest tests -q
+      - name: Check Python style
+        run: |
+          uv run ruff check src/agent_native_graph tests
+          uv run ruff format --check src/agent_native_graph tests
       - name: Check browser script
         run: |
           node --check docs/site/site.js

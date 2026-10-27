@@ -21,3 +21,7 @@ downloads/
 runs/
 results/
 temporary_scripts/
+.local-notes/
+.local-results/
+scripts/
+*.config.json

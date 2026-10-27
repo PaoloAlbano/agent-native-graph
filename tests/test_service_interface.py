@@ -1,4 +1,15 @@
+from pathlib import Path
 from typing import Any
+
+
+def test_docker_build_includes_license_and_excludes_private_artifacts() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dockerfile = (root / "Dockerfile").read_text()
+    assert "COPY pyproject.toml uv.lock README.md LICENSE ./" in dockerfile
+    assert "MIT License" in (root / "LICENSE").read_text()
+    ignored = (root / ".dockerignore").read_text().splitlines()
+    for path in (".local-notes/", ".local-results/", "scripts/", "*.config.json"):
+        assert path in ignored
 
 
 def test_service_backend_introspects_schema_when_no_schema_file(monkeypatch) -> None:

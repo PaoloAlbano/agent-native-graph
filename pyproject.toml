@@ -4,13 +4,14 @@ version = "0.1.0"
 description = "Research prototype for Agent-Native APIs over knowledge graphs."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [
   { email = "paoloalbano90@gmail.com" },
 ]
 dependencies = [
   "httpx>=0.27",
   "neo4j>=5.0",
+  "PyYAML>=6.0",
 ]
 
 [project.scripts]

@@ -1,8 +1,10 @@
 import json
+import shutil
 from html.parser import HTMLParser
 from pathlib import Path
 
 from agent_native_graph.core.tool_specs import _tool_specs
+from agent_native_graph.research import build_docs as builder
 from agent_native_graph.research.build_docs import (
     build_site,
     collect_catalog,
@@ -48,6 +50,34 @@ def test_catalog_matches_effective_native_contract_and_availability():
     assert "from_" not in project["properties"]
 
 
+def test_default_build_keeps_docs_source_only_and_excludes_private_notes(tmp_path, monkeypatch):
+    sources = tmp_path / "docs/site"
+    shutil.copytree(REPO_ROOT / "docs/site", sources)
+    (tmp_path / "docs/public.md").write_text("Public documentation")
+    private = tmp_path / ".local-notes"
+    private.mkdir()
+    (private / "roadmap.md").write_text("Private planning, never publish")
+    before = {
+        p.relative_to(tmp_path): p.read_bytes()
+        for p in (tmp_path / "docs").rglob("*")
+        if p.is_file()
+    }
+    catalog, example = collect_catalog(REPO_ROOT), load_example(REPO_ROOT)
+    monkeypatch.setattr(builder, "collect_catalog", lambda root: catalog)
+    monkeypatch.setattr(builder, "load_example", lambda root: example)
+    monkeypatch.setattr(builder, "publish_results", lambda *args: None)
+    monkeypatch.setattr(builder, "publish_comparison", lambda *args: None)
+    page = builder.build_site(tmp_path)
+    assert page == tmp_path / "build/site/index.html"
+    assert before == {
+        p.relative_to(tmp_path): p.read_bytes()
+        for p in (tmp_path / "docs").rglob("*")
+        if p.is_file()
+    }
+    assert not (page.parent / "roadmap.md").exists()
+    assert "Private planning" not in page.read_text()
+
+
 def test_build_preserves_existing_docs_and_has_resolvable_tool_links(tmp_path):
     existing = tmp_path / "editorial.md"
     existing.write_text("Keep this research note.\n")
@@ -61,6 +91,10 @@ def test_build_preserves_existing_docs_and_has_resolvable_tool_links(tmp_path):
     assert {f"tool-{tool['name']}" for tool in catalog["tools"]} <= set(parsed.ids)
     assert parsed.scripts == [{"defer": None, "src": "assets/site.js"}]
     assert "@@TOOL_CATALOG@@" not in page.read_text()
+    assert "will make the recorded runs explorable" not in page.read_text()
+    results_page = (tmp_path / "results.html").read_text()
+    assert "<code>docs/site/</code>" in results_page
+    assert "<code>build/site/</code>" in results_page
     assert (tmp_path / "assets/site.css").is_file()
     assert (tmp_path / "assets/site.js").is_file()
     example = json.loads((tmp_path / "data/example-trajectory.json").read_text())

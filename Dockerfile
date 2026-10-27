@@ -6,7 +6,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 COPY --from=ghcr.io/astral-sh/uv:0.5.31 /uv /uvx /bin/
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
 
 RUN uv sync --no-dev --extra service --frozen

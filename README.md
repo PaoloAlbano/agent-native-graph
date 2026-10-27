@@ -1,452 +1,257 @@
-# **Agent-Native APIs: Rethinking Data Access for LLM Agents**
+# Agent-Native APIs: Rethinking Data Access for LLM Agents
 
-This repository contains a research prototype for **Agent-Native APIs (ANA)** applied to knowledge graph question answering.
+**Design the data interface for the agent, rather than only teaching the agent
+to use an interface designed for humans.**
 
-The central hypothesis is simple: query languages such as Cypher, SQL, and SPARQL were designed to give humans a compact formal language for data access. That does not necessarily make them the best interface for an LLM agent. Instead of asking a model to synthesize one perfect query end-to-end, ANA exposes bounded, composable, inspectable operations that match how agents explore, verify, and refine intermediate state.
+[Live Website](https://paoloalbano.github.io/agent-native-graph/) |
+[ANA Results](https://paoloalbano.github.io/agent-native-graph/results.html) |
+[Baseline Comparison](https://paoloalbano.github.io/agent-native-graph/comparison.html) |
+[Paper Draft](paper/README.md)
 
-In this project we study that idea on the `company` slice of CypherBench, comparing:
+Agent-Native Graph is a research prototype for **Agent-Native APIs (ANA)**.
+Instead of asking an LLM to generate one complete formal query, the agent
+discovers the schema, resolves entities, composes operations and inspects
+intermediate results through server-side handles.
 
-1. direct text-to-Cypher generation;
-2. multi-agent/self-correcting text-to-Cypher;
-3. an agent-first tool interface over Neo4j using server-side handles.
+The idea concerns data access more generally; **knowledge graph question
+answering is the current case study**, not a demonstrated result for every
+domain. This repository studies CypherBench **Company** over Neo4j, alongside
+direct text-to-Cypher and multi-agent/self-correcting text-to-Cypher approaches.
 
-## Why ANA?
+Cypher, SQL and SPARQL remain valuable formal interfaces. The research question
+is whether an interface designed explicitly for agents can improve their
+reliability and answer quality on a given task. **MCP is transport; ANA is
+interface design.** The current findings are exploratory, not a claim of
+universal superiority or production readiness.
 
-**MCP is transport. ANA is interface design.**
+## Explore the Published Results
 
-MCP can expose tools to agents, but it does not say how those tools should be shaped. ANA is the design layer: it asks which operations should exist, how they should be bounded, how schema discovery should work, how intermediate state should be represented, and how an agent can safely compose graph operations without materializing huge result sets.
+The [GitHub Pages website](https://paoloalbano.github.io/agent-native-graph/)
+is public: **no installation, database or API key is needed to browse it**.
 
-## Research Website
+| Section | What you can inspect |
+| --- | --- |
+| [Approach and tools](https://paoloalbano.github.io/agent-native-graph/#approach) | The design, an example trajectory and the [effective tool catalog](https://paoloalbano.github.io/agent-native-graph/#tool-catalog), including parameters and source links |
+| [ANA on Company](https://paoloalbano.github.io/agent-native-graph/results.html) | Complete 347-question runs grouped by model and configuration, with individual questions, expected/returned answers and recorded tool-call sequences |
+| [Comparison](https://paoloalbano.github.io/agent-native-graph/comparison.html) | The exact 100 shared Company QIDs, matched model/settings, direct and multi-agent baseline evidence, and per-question drill-down |
 
-Preview the static research website from the repository root:
+Results pages preserve the distinction between **technical execution success**
+and **correct answers**. The comparison also separates two different evaluations:
+
+- **Original metrics:** ANA exact-answer matching beside the baseline source's
+  LLM-judge verdicts on final textual answers. These evaluators are not equivalent.
+- **Common query-result metric:** saved baseline Cypher re-executed on the
+  verified ANA graph and scored with the same exact-result comparator as ANA.
+  This measures returned rows, not the baseline's final prose answer.
+
+Questions, graph provenance, budgets and historical execution conditions still
+matter. See the [methodology caveats](docs/methodology-audit.md) and
+[comparison protocol](docs/multigraphrag-comparison.md) before interpreting
+cross-method differences. Missing historical prompts, reasoning or full handle
+contents are not reconstructed as if they had been recorded.
+
+Raw curated evidence lives in [`results/`](results/), not in the generated site.
+The website reads and validates those archives without changing them. GitHub
+Actions validates pull requests and publishes Pages after relevant changes
+merge to `main`; branch-local work is not automatically the published version.
+
+## Contribute a Benchmark Run
+
+Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), a Neo4j database
+prepared with Company data, and an OpenAI-compatible model endpoint/API key.
+
+```bash
+git clone https://github.com/PaoloAlbano/agent-native-graph.git
+cd agent-native-graph
+make sync
+```
+
+Follow [data preparation](docs/reproduction.md#prepare-company-data) before
+launching. Raw task/schema files and the graph dump are not bundled with the
+repository. **`make load-company` clears its target database**: only use a
+dedicated disposable database, never a database you want to preserve.
+
+Configure `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, and either `API_KEY` or
+`API_KEY_FILE` in your environment. `BASE_URL` defaults to OpenRouter; override
+it for another compatible gateway. Use the exact model ID accepted by that
+provider. Never commit real credentials or private endpoint addresses.
+
+Run all 347 Company questions:
+
+```bash
+make benchmark MODEL=your-model-id PROFILE=temp0-none
+```
+
+The runner checks inputs and graph content, creates a unique output path, saves
+the actual configuration and prints where results are being written. It does
+not overwrite existing output or reload Neo4j. `CONCURRENCY=3` is the default;
+add `CHECK_ONLY=1` for an offline input check without inference or a database call.
+
+Archive the completed run using the printed path:
+
+```bash
+make archive-result OUT=/tmp/agent-native-graph-runs/the-printed-file.jsonl
+```
+
+The archiver reads saved settings, checks QIDs/task contents, preserves the
+original output and refreshes the index. You do not need to repeat model,
+temperature or token settings. Commit the complete archive and index, not the
+temporary output or local metadata sidecar. CI builds the presentation; it
+never launches a paid benchmark.
+
+See [Contribute a Company Run](docs/run-standard.md) for resume, replicas,
+configuration validation and publishing, or [reproduction](docs/reproduction.md)
+for advanced CLI diagnostics. `make help` lists available commands.
+
+### YAML Model-Call Profiles
+
+Profiles live in [`src/agent_native_graph/profiles/`](src/agent_native_graph/profiles/)
+and contain no model name, endpoint or credentials. The reference matrix is:
+
+| Temperature | Thinking requested off | Thinking requested on, medium effort |
+| --- | --- | --- |
+| 0 | [`temp0-none`](src/agent_native_graph/profiles/temp0-none.yaml) | [`temp0-medium`](src/agent_native_graph/profiles/temp0-medium.yaml) |
+| 1 | [`temp1-none`](src/agent_native_graph/profiles/temp1-none.yaml) | [`temp1-medium`](src/agent_native_graph/profiles/temp1-medium.yaml) |
+
+All other settings are equal, including **16k output tokens and `tool_choice=auto`**.
+The YAML files also expose optional sampling controls, seed, penalties, stop
+sequences and HTTP timeout/retry policy. Optional `null` values are omitted from
+the request. Add a `*.yaml` and select its filename stem as `PROFILE`; no Python
+registry needs updating. Effective values and the file hash are recorded.
+
+These are **LLM-call profiles, not graph-access permissions**. Agent-step limits,
+dataset size, Neo4j timeout and concurrency are separate benchmark settings.
+Temperature zero does not guarantee determinism, and requested reasoning does
+not prove how the provider executed it. Changing a profile is a new experimental
+treatment, not a retroactive change to archived results.
+
+### Reference Baselines
+
+Published comparison evidence is read from a pinned commit of
+[Multi-Agent GraphRAG implementation](https://github.com/PaoloAlbano/multi-agent-graphrag-implementation).
+It uses the exact [100 shared QIDs](data/reference_company100_qids.json), not
+simply the first 100 current task rows. Original baseline archives remain in
+that source repository; derived query re-executions are stored separately here.
+
+The packaged research commands also support baseline execution, checking and
+archiving. Their default full-split experiment is not automatically the published
+100-QID comparison. Follow the [comparison contributor workflow](docs/multigraphrag-comparison.md#contributor-workflow)
+to add compatible baseline evidence or repeat the common-result evaluation.
+
+## Preview or Build the Website
 
 ```bash
 make docs-serve
 ```
 
-Open <http://127.0.0.1:8000>. Use `DOCS_PORT=8001` to select another port.
-`make docs-build` regenerates the site without starting a server. Rebuild and
-refresh the browser after changing the content or tool definitions.
+Open [localhost:8000](http://127.0.0.1:8000). `DOCS_PORT=8001` changes the port;
+`make docs-build` builds without starting a server. Source templates, styles
+and scripts live in [`docs/site/`](docs/site/); generated output goes to ignored
+`build/site/`, both locally and in CI. Rebuild/restart the preview after changes.
 
-The first section explains ANA and documents every currently exposed tool,
-including its effective LLM description, required parameters, nested schemas,
-and Python source. The catalog is generated from code. The second section,
-`results.html`, explores all 347 Company questions across complete ANA runs:
-scores, outcome filters, golden queries, answers, tool sequences, handle links,
-and side-by-side run comparisons. The third section (`comparison.html`) pairs
-the same 100 Company QIDs with the pinned Multi-Agent GraphRAG repository,
-with separate profile and question pages. ANA exact-answer scores and external
-LLM-judge scores are explicitly different metrics. A separate table uses saved
-baseline query re-executions and the same exact-result comparator as ANA.
-See the [comparison and contributor workflow](docs/multigraphrag-comparison.md).
-Results are grouped by model, with dedicated static model pages and direct
-links to a separate static page for each run. Overview and model pages require
-no JavaScript or benchmark-data downloads. Only a run page loads its question
-index and the selected question's details; this is not a single-page application.
+Building needs neither Neo4j nor an LLM key. The comparison uses a local checkout
+of its pinned external Git source; see [site maintenance](docs/site/README.md).
+To enable deployment in a fork, select **Settings > Pages > Source > GitHub Actions**.
+The existing [workflow](.github/workflows/docs.yml) handles validation, build and
+publication; do not commit generated HTML/JSON or create a separate `gh-pages` branch.
 
-Benchmark writers save to `results/`; the website reads those archives and
-generates a static presentation under `docs/`. It never rewrites the evidence.
-Checksums, question sets and summary counts are checked during the build.
+## Experimental HTTP Service
 
-Editable website sources live in [`docs/site/`](docs/site/). The Markdown
-research notes remain in `docs/`; generated HTML, assets, and catalog JSON are
-ignored locally. GitHub Actions validates the site on pull requests and builds
-and deploys it on pushes to `main`. Enable **Settings → Pages → Source → GitHub
-Actions** in GitHub to activate publication. The build requires neither a
-running database nor an LLM API key.
+The service exposes graph operations without embedding an LLM. It is a prototype:
+**there is no authentication or multi-client handle isolation guarantee**, and
+the backend/handle state is currently process-global. Do not expose it directly
+to untrusted networks or describe it as production-ready.
 
-## Paper / Preprint Draft
-
-The paper-like research narrative lives in [`paper/`](paper/):
-
-- [`paper/README.md`](paper/README.md): navigable table of contents and stable reference labels.
-- [`paper/00-abstract.md`](paper/00-abstract.md): abstract.
-- [`paper/01-introduction.md`](paper/01-introduction.md) through [`paper/12-conclusion.md`](paper/12-conclusion.md): section-by-section draft.
-
-Use the paper directory when you want something easy to reference or later turn
-into a preprint/PDF. Use `docs/` for repository documentation, reproduction
-notes, tool contracts, and engineering decisions.
-
-## Repository layout
-
-- `scripts/`: ignored local fixes, discovery, and historical experiments; not part of the public reproduction workflow.
-- `tests/`: unit tests for the wrapper/tool backend and analysis helpers.
-- `data/`: CypherBench company tasks and schema exports. This is ignored by default because it can be regenerated or replaced.
-- `downloads/`: raw downloaded graph/dataset files. Ignored by default.
-- `results/`: selected benchmark runs kept as research evidence.
-- `docs/`: methodology, tool definitions, results, and lessons learned.
-- `paper/`: navigable paper/preprint draft with section-level files and stable reference labels.
-- `src/agent_native_graph/`: installable ANA package, stable tool contract metadata, backend protocol, CLI/service interfaces, LLM providers, and concrete database adapters.
-
-The package is being shaped toward a clean architecture:
-
-```text
-src/agent_native_graph/
-  core/            # stable ANA contracts, backend protocol, and native tool-call metadata
-  domain/          # stable domain primitives such as server-side handles
-  tools/           # executable ANA tool functions and graph helpers
-  backends/        # concrete database adapters, currently Neo4j
-  llm_providers/   # model access adapters, starting with OpenAI-compatible APIs
-  application/     # benchmark and agent orchestration entrypoints
-  interfaces/      # CLI and HTTP/service transport adapters
-  research/        # reproducible Company preparation, baselines, archives, and audits
-```
-
-Research commands are exposed through `agent-native-graph`; local `scripts/`
-are not required to reproduce the benchmark.
-
-## Current Implementation
-
-The main Neo4j backend is currently implemented in:
-
-```text
-src/agent_native_graph/backends/neo4j/backend.py
-```
-
-The concrete class is `Neo4jGraphBackend`. It calls Neo4j and delegates
-server-side handle state to `agent_native_graph.core.handle_store.HandleStore`.
-Interfaces should depend on the abstract
-`agent_native_graph.core.backend.AgentGraphBackend` contract and instantiate the
-concrete Neo4j adapter at their backend boundary.
-
-Benchmark orchestration is now separate from the backend:
-
-```text
-src/agent_native_graph/application/neo4j_benchmark.py
-```
-
-The benchmark module runs CypherBench tasks, drives the LLM/tool loop, records
-metrics, and scores answers against CypherBench `answer_json`.
-
-The backend contract lives in `agent_native_graph.core.backend.AgentGraphBackend`.
-Tool metadata should be declared near executable tool code with `@tool(...)`
-from `agent_native_graph.core.tooling`; decorated metadata is then used to build
-native OpenAI/vLLM-compatible tool-call specs.
-
-Tool registration flow:
-
-```text
-tools/*.py function
-  -> @tool(name=..., status=..., profile=..., purpose=..., description=...)
-  -> core.tooling registry
-  -> core.tool_specs._tool_specs(...) for native LLM tool calls
-  -> core.tool_specs._native_system_prompt(...) for the native LLM guidance
-     used alongside the exposed tool specs
-```
-
-`tools/load_tool_modules()` imports the modules that contain decorated tools.
-Decorated metadata supplies the CLI/API contracts and MCP adapter skeleton.
-Native LLM tool specs additionally pass through the compatibility overrides in
-`core/tool_specs.py`; the website documents that effective model-facing surface.
-
-The refactor has separated the concrete Neo4j adapter, reusable handle storage,
-tool layer, service interface, and benchmark runner. The Neo4j backend is still
-kept as one implementation file for now; the next structural split can be done
-later if it becomes useful.
-
-## Quick start
-
-Install dependencies with `uv`:
+With Neo4j connection variables configured, start a loopback-only instance:
 
 ```bash
-uv sync --extra dev --extra service
+uv run uvicorn agent_native_graph.interfaces.service:app --host 127.0.0.1 --port 8080
 ```
 
-The repository is an installable `uv` project. Reusable code and reproducible
-research commands live under `src/agent_native_graph` and use the packaged CLI.
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Process liveness only; does not verify Neo4j readiness |
+| `GET /tools` | Public tool-contract metadata, optionally filtered by design status |
+| `POST /tools/call` | Execute an operation, e.g. `{"tool":"schema_overview","args":{}}` |
 
-The common workflow is also available through `make`:
+Schema is discovered from Neo4j when the backend is first needed by a tool call,
+not during `/health`. `ANA_SCHEMA_JSON` is an optional explicit schema override;
+no Company-specific JSON is required for ordinary service discovery.
+`ANA_NEO4J_QUERY_TIMEOUT_S` defaults to 30 seconds.
 
-```bash
-make help
-make sync
-make prepare-company-tasks
-make load-company
-make export-schema
-make benchmark
-make evaluate
-```
-
-Set Neo4j and LLM environment variables:
-
-```bash
-export NEO4J_URI="bolt://127.0.0.1:7687"
-export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="password"
-export BASE_URL="https://openrouter.ai/api/"
-export MODEL="your_model"
-export API_KEY_FILE="/tmp/grapharrow-agent-key"
-```
-
-Load the company graph into Neo4j:
-
-First prepare the CypherBench Company task file:
-
-```bash
-make prepare-company-tasks
-```
-
-The raw graph dump itself is not versioned. Place it at
-`downloads/company_simplekg.json`, then load it:
-
-```bash
-make load-company
-```
-
-Export the schema consumed by the benchmark from the loaded graph:
-
-```bash
-make export-schema
-```
-
-Equivalent explicit command:
-
-```bash
-uv run agent-native-graph load-company \
-  --neo4j-uri "$NEO4J_URI" \
-  --neo4j-user "$NEO4J_USER" \
-  --neo4j-password "$NEO4J_PASSWORD" \
-  --graph downloads/company_simplekg.json \
-  --clear \
-  --batch-size 2000
-```
-
-Run the agent-native benchmark on the first 100 company tasks:
-
-```bash
-make benchmark
-```
-
-Equivalent explicit command:
-
-```bash
-uv run agent-native-graph benchmark-neo4j \
-  --tasks data/tasks_company_test.jsonl \
-  --schema-json data/company_schema.json \
-  --out /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b.jsonl \
-  --limit 100 \
-  --native-tools \
-  --model your_model \
-  --api-key-file /tmp/grapharrow-agent-key \
-  --tool-choice auto \
-  --max-tokens 16000 \
-  --max-steps 12 \
-  --concurrency 3 \
-  --evaluation-fetch-all-pages
-```
-
-Run the full company split by overriding `LIMIT` and choosing a temporary output
-file outside the repository:
-
-```bash
-make benchmark-full \
-  MODEL=openai/gpt-oss-120b \
-  LIMIT=347 \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp0_reasoning_none_n347.jsonl
-```
-
-Run another OpenAI-compatible model with the same protocol:
-
-```bash
-make benchmark-full \
-  MODEL=Qwen/Qwen3.6-27B \
-  CONCURRENCY=1 \
-  OUT=/tmp/agent-native-graph-runs/company_qwen3_6_27b_temp0_reasoning_none_n347.jsonl
-```
-
-Run the higher-temperature reasoning profile used in the investigation:
-
-```bash
-make benchmark-full \
-  MODEL=openai/gpt-oss-120b \
-  TEMPERATURE=1 \
-  THINKING=1 \
-  THINKING_EFFORT=medium \
-  REASONING=medium \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp1_reasoning_medium_n347.jsonl
-```
-
-Neo4j query timeout defaults to 30 seconds. Override it with
-`--neo4j-query-timeout-s` for benchmark runs.
-
-Evaluate a run:
-
-```bash
-make evaluate OUT=/tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b.jsonl
-```
-
-Equivalent explicit command:
-
-```bash
-uv run agent-native-graph evaluate-run --run /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b.jsonl
-```
-
-## Reference Baselines
-
-The external Multi-Agent GraphRAG implementation can be run through the local
-research harness. Its historical Company trace has 100 questions, whereas
-ANA's full-split behavior analysis has 347. The published query-result comparison
-uses the pinned 100 QIDs and a common evaluator; historical scores from the
-reference repo's judge are not directly comparable with ANA's exact scores.
-See the [comparison scope](docs/multigraphrag-comparison.md).
-
-```bash
-make baseline-check
-make baseline-run BASELINE_MODE=direct MODEL=openai/gpt-oss-120b
-make baseline-run BASELINE_MODE=agentic MODEL=openai/gpt-oss-120b
-```
-
-Set `BASE_URL` and `API_KEY_FILE` for your OpenAI-compatible model gateway.
-Use `RESUME=1` with the same `BASELINE_OUT` after an interrupted run. Archive
-only complete runs with `make baseline-archive BASELINE_OUT=...`. The existing
-347-question baseline archives are retained as historical data, not as the
-100-question comparison. See the [benchmark protocol](docs/benchmark-protocol.md).
-`make baseline-run` currently defaults to 347 cases; it does not reproduce the
-reference repository's 100-case evaluation by itself.
-The archived runs live only in the ignored local `.local-results/baselines/`
-directory. The gold-query check found two Company questions with
-non-reproducible answers.
-
-
-## Service shape
-
-The repository includes an experimental HTTP service shape over the packaged
-Neo4j backend. The concrete adapter lives under `backends/neo4j`, while
-interfaces depend on stable package entrypoints.
-
-Run it locally with:
-
-```bash
-make serve
-```
-
-Equivalent explicit command:
-
-```bash
-uv run agent-native-graph serve
-```
-
-Useful endpoints:
-
-- `GET /health`
-- `GET /tools`
-- `POST /tools/call` with `{"tool": "schema_overview", "args": {}}`
-
-Configure it with:
-
-```bash
-export NEO4J_URI="bolt://127.0.0.1:7687"
-export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="password"
-export ANA_NEO4J_QUERY_TIMEOUT_S="30"
-```
-
-By default the service discovers graph schema directly from Neo4j at startup.
-Set `ANA_SCHEMA_JSON` only when you deliberately want to override discovery with
-a fixed schema file for a controlled experiment.
-
-Neo4j query timeout defaults to `ANA_NEO4J_QUERY_TIMEOUT_S=30`.
-
-## Results Hygiene
-
-`results/` contains curated full-split CypherBench Company runs (`limit=347`)
-and separately archived, complete 100-question query re-execution evaluations.
-Diagnostic runs remain outside `results/`, for example under
-`/tmp/agent-native-graph-runs` or the ignored local `.local-results/` archive.
-
-Incomplete, single-case, retry, and debugging outputs should remain outside
-the repository, for example under `/tmp/agent-native-graph-runs`.
-
-The [347-question ANA analysis](docs/cypherbench-company-results.md) and the
-[100-question external comparison](docs/multigraphrag-comparison.md)
-are separate research sections, both presented by the generated static site.
-
-Curated runs live under:
-
-```text
-results/cypherbench-company/
-  index.json
-  gold-validation.jsonl
-  gold-validation.md
-  gold-execution-20261025.jsonl
-  full/runs/<run_id>/
-    manifest.json
-    summary.json
-    failures.jsonl
-    run.jsonl
-```
-
-The four retained runs have complete model, task-file, graph-dump, and run
-hash metadata. Four earlier runs lacking task and graph hashes were moved to
-the ignored local archive. See the [results format and provenance
-notes](results/README.md). Use `make archive-result` after a benchmark run to
-create this structure and refresh the benchmark index.
-
-Example archive command for a complete full run:
-
-```bash
-make archive-result \
-  MODEL=openai/gpt-oss-120b \
-  LIMIT=347 \
-  TEMPERATURE=0 \
-  REASONING=none \
-  CONCURRENCY=5 \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp0_reasoning_none_n347.jsonl
-```
-
-The reproducible benchmark protocol is defined in
-[`docs/benchmark-protocol.md`](docs/benchmark-protocol.md).
-
-
-## Docker
-
-Build and run the experimental service container:
+A [Dockerfile](Dockerfile) is provided for this experimental service, not for
+loading datasets or running benchmarks automatically. For a Docker Desktop
+local example, configure the URI to reach Neo4j from inside the container:
 
 ```bash
 make docker-build
-make docker-run
-```
-
-Equivalent explicit commands:
-
-```bash
-docker build -t agent-native-graph .
-docker run --rm -p 8080:8080 \
+docker run --rm -p 127.0.0.1:8080:8080 \
   -e NEO4J_URI=bolt://host.docker.internal:7687 \
-  -e NEO4J_USER=neo4j \
-  -e NEO4J_PASSWORD=password \
-  agent-native-graph
+  -e NEO4J_USER -e NEO4J_PASSWORD agent-native-graph
 ```
 
-The container starts the HTTP service and discovers schema from Neo4j. Raw
-datasets are intentionally not baked into the image.
+Adjust the URI for your container network. The `make serve` / `make docker-run`
+shortcuts bind more broadly; use the loopback examples above for local-only access.
 
-## Tool Catalog
+## Code and Tool Contracts
 
-Print the current ANA tool catalog generated from decorated tool functions:
+```text
+src/agent_native_graph/
+  core/           # backend contracts, tool registry, prompts and handle storage
+  domain/         # graph/handle primitives
+  tools/          # decorated, executable graph operations
+  backends/       # concrete adapters, currently Neo4j
+  llm_providers/  # model-call settings and OpenAI-compatible adapter
+  profiles/       # editable YAML model-call profiles
+  application/    # agent loop, benchmark runner and run metadata
+  interfaces/     # CLI and experimental HTTP/MCP transports
+  research/       # reproducible preparation, scoring, archive and site commands
+```
+
+`Neo4jGraphBackend` implements `AgentGraphBackend`; reusable handle state lives
+in `HandleStore`. Tool definitions and parameter annotations live beside the
+functions under `tools/`, using `@tool`. The native runner applies the effective
+specification/compatibility rules in `core/tool_specs.py`.
 
 ```bash
 make list-tools
 ```
 
-Equivalent explicit command:
+This prints decorator-derived names, statuses, access profiles and purpose
+metadata. Full effective LLM descriptions and parameter schemas are in the
+[live tool reference](https://paoloalbano.github.io/agent-native-graph/#tool-catalog).
+The current catalog is not assumed to be the contract of a historical run.
+
+## Tests and Evidence
 
 ```bash
-uv run agent-native-graph tools
+make lint
+make test
 ```
 
-This shows the native tool-call metadata exposed to LLM agents: tool names,
-profiles, statuses, descriptions, and JSON schemas for parameters. The
-human-readable contract is in `docs/ana-v0-tool-contract.md`.
+Offline tests use a versioned synthetic schema. `make test-backend` opts in to
+Neo4j integration tests and requires the prepared Company dataset. Skipped
+integration cases are not certified by an offline test pass. See
+[reproduction](docs/reproduction.md#tests-and-documentation) for details.
 
-## Research notes
+Curated ANA archives contain `manifest.json`, `summary.json`, `failures.jsonl`
+and `run.jsonl`; new runs also include sanitized `run-config.json` provenance.
+Incomplete diagnostics remain outside the public archive. See the
+[results format](results/README.md), [benchmark protocol](docs/benchmark-protocol.md)
+and [methodology caveats](docs/methodology-audit.md).
 
-Start with:
+## Paper and Further Reading
 
-- `docs/agent-native-apis.md`
-- `docs/tool-catalog.md`
-- `docs/ana-v0-tool-contract.md`
-- `docs/repo-hygiene.md`
-- `docs/cypherbench-company-results.md`
-- `docs/lessons-learned.md`
-- `docs/reproduction.md`
+The [paper/preprint draft](paper/README.md) is a navigable work in progress,
+not a published or peer-reviewed paper. Public documentation includes:
+
+- [ANA approach](docs/agent-native-apis.md)
+- [Tool contract](docs/ana-v0-tool-contract.md) and [catalog guide](docs/tool-catalog.md)
+- [Company evidence](docs/cypherbench-company-results.md)
+- [Comparison protocol](docs/multigraphrag-comparison.md)
+- [Repository conventions](docs/repo-hygiene.md)
+
+## License
+
+This project's code is available under the [MIT License](LICENSE). External
+datasets and baseline artifacts remain subject to their own licenses.

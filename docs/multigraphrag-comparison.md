@@ -23,10 +23,8 @@ first 100 rows of the current CypherBench task file.
   promote the old 347-question paired reports as the 100-question comparison.
 
 The common query-result metric is now published separately from the original
-LLM-judge scores, using the saved re-execution evidence described below. The historical 347-question
-baseline runs remain preserved under `.local-results/baselines/` until their
-provenance and future home are settled; they are not a substitute for the
-reference repository's 100-question experiment.
+LLM-judge scores, using the saved re-execution evidence described below. This
+100-question experiment is separate from the full-split 347-question ANA analysis.
 
 ## Implemented Evidence Explorer
 
@@ -103,8 +101,8 @@ verdicts remain separate. No LLM or database calls happen during the site build.
 
 99/100 golden queries reproduce the expected rows. QID
 `8536d1ef-cb04-4bc6-8f9a-4aff1279dc0f` returns a different youngest board member;
-all 100 cases remain included in the published scores. TODO: investigate this
-golden-answer discrepancy in a future analysis. The saved manifest retains the
+all 100 cases remain included in the published scores. This is a known
+golden-answer discrepancy. The saved manifest retains the
 diagnostic 99-case counts, but they are not the site's comparison metric.
 Re-execution verifies the current common graph, not the undocumented historical
 graph used to generate the external queries. This is query-result correctness,

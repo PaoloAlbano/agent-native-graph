@@ -31,10 +31,10 @@ not estimates of model-level variance.
 The [`gold-validation` report](../results/cypherbench-company/gold-validation.md)
 shows that the stored gold Cypher executes for all 347 questions but reproduces
 `answer_json` for only 345 on this Neo4j graph. Keep all 347 in the primary
-denominator and report the 345-case sensitivity analysis separately.
+denominator. The discrepancies remain documented; no question is excluded
+from the primary scores.
 
 The full per-question `run.jsonl` files, including tool trajectories and error
 classes, are the source for deeper analysis. A first
 [methodology and failure audit](methodology-audit.md) records known scoring and
-repeatability caveats. This section should be expanded from those records,
-without conflating it with the 100-question external comparison.
+repeatability caveats, separately from the 100-question external comparison.
