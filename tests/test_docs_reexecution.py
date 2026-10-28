@@ -1,9 +1,13 @@
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
+from agent_native_graph.research.docs_comparison import profile
 from agent_native_graph.research.docs_reexecution import load_evaluation
+from agent_native_graph.research.docs_results import read_runs
+from agent_native_graph.research_common import result_matches_answer
 
 
 @pytest.fixture
@@ -63,6 +67,33 @@ def test_new_run_does_not_invalidate_historical_evaluation(evidence):
     assert "new-run" not in report["ana"]
 
 
+@pytest.mark.parametrize("temperature,reasoning", [(0, "medium"), (1, "none")])
+def test_extended_evaluation_checks_new_profile_provenance(evidence, temperature, reasoning):
+    root, config, pinned, runs = evidence
+    run_id = f"new-temp{temperature}-{reasoning}"
+    new = {
+        **runs[0],
+        "manifest": {
+            **runs[0]["manifest"],
+            "run_id": run_id,
+            "run_sha256": "new-hash",
+            "temperature": temperature,
+            "reasoning": reasoning,
+        },
+    }
+    path = root / "evaluation/manifest.json"
+    saved = json.loads(path.read_text())
+    saved["ana"][run_id] = {"run_sha256": "new-hash"}
+    path.write_text(json.dumps(saved))
+    report = load_evaluation(root, config, pinned, [*runs, new])
+    assert report["ana"][run_id]["run_sha256"] == "new-hash"
+
+    saved["ana"][run_id]["run_sha256"] = "different-run"
+    path.write_text(json.dumps(saved))
+    with pytest.raises(ValueError, match="ANA provenance mismatch"):
+        load_evaluation(root, config, pinned, [*runs, new])
+
+
 @pytest.mark.parametrize("change", ["status", "snapshot", "source", "qid", "graph"])
 def test_rejects_invalid_provenance(evidence, change):
     path = evidence[0] / "evaluation/manifest.json"
@@ -99,3 +130,38 @@ def test_rejects_wrong_verdict_even_with_updated_checksum(evidence):
     (folder / "manifest.json").write_text(json.dumps(report))
     with pytest.raises(ValueError, match="verdict"):
         load_evaluation(*evidence)
+
+
+def test_selected_evaluation_covers_qwen_matrix_and_its_pinned_baselines():
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads((root / "docs/site/comparison-source.json").read_text())
+    pinned = json.loads((root / config["qid_file"]).read_text())
+    runs = read_runs(root)
+    report = load_evaluation(root, config, pinned, runs)
+    assert report is not None
+    assert set(report["ana"]) <= {run["manifest"]["run_id"] for run in runs}
+    # Future contributions may legitimately await their own baseline evaluation.
+    covered = [run for run in runs if run["manifest"]["run_id"] in report["ana"]]
+    qwen_profiles = {
+        profile(run["manifest"])[1:]
+        for run in covered
+        if run["manifest"]["model"] == "Qwen/Qwen3.5-27B"
+    }
+    assert {(0, "none"), (0, "medium"), (1, "none"), (1, "medium")} <= qwen_profiles
+    pairs = {
+        (profile(entry["config"], True), Path(path).name)
+        for path, entry in report["baselines"].items()
+    }
+    assert pairs >= {
+        (profile(run["manifest"]), mode) for run in covered for mode in ("single", "agentic")
+    }
+    qids = set(pinned["qids"])
+    for run in covered:
+        rows = [r for r in run["records"] if r["qid"] in qids]
+        assert len(rows) == 100
+        expected_correct = sum(
+            bool(r["ok"]) and result_matches_answer(r["rows"], r["expected"]) for r in rows
+        )
+        saved = report["ana"][run["manifest"]["run_id"]]
+        assert saved["total"] == 100 and saved["correct"] == expected_correct
+    assert all(entry["total"] == 100 for entry in report["baselines"].values())

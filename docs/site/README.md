@@ -30,7 +30,7 @@ settings. CI builds into `build/site/` so only generated public site artifacts
 are uploaded. Editorial Markdown files remain available through repository links.
 
 To contribute a Company run, add its complete archive (`manifest.json`,
-`summary.json`, `failures.jsonl`, `run.jsonl`) under
+`summary.json`, `failures.jsonl`, `run.jsonl`, `run-config.json`) under
 `results/cypherbench-company/full/runs/<unique-run-id>/` and open a pull request.
 The workflow validates and builds the site without publishing from pull requests.
 After merge to `main`, it rebuilds and publishes Pages automatically. No hand

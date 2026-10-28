@@ -1,0 +1,102 @@
+{
+  "accuracy": 0.8357348703170029,
+  "avg_llm_calls": 5.599423631123919,
+  "avg_tool_calls": 5.599423631123919,
+  "executable_rate": 0.9913544668587896,
+  "failure_classes": {
+    "backend_timeout": 8,
+    "no_final_fetch_or_max_steps": 3,
+    "semantic_mismatch": 46
+  },
+  "failure_total": 57,
+  "llm_completion_tokens": 628283,
+  "llm_prompt_tokens": 57451201,
+  "llm_total_tokens": 58079484,
+  "matches": 290,
+  "ok": 344,
+  "run_id": "2026-10-28_qwen-qwen3.5-27b_temp0_reasoning-medium_tools-native_n347_2026-10-28t10-49-03.059153-00-00",
+  "tool_errors": 16,
+  "top_tools": [
+    [
+      "schema_overview",
+      348
+    ],
+    [
+      "fetch",
+      344
+    ],
+    [
+      "expand",
+      341
+    ],
+    [
+      "entity_resolve",
+      328
+    ],
+    [
+      "project",
+      102
+    ],
+    [
+      "pattern_query",
+      94
+    ],
+    [
+      "entity_set_operation",
+      59
+    ],
+    [
+      "value_search",
+      57
+    ],
+    [
+      "count_handle",
+      36
+    ],
+    [
+      "same_target_role_intersection",
+      30
+    ],
+    [
+      "group_handle",
+      30
+    ],
+    [
+      "constraint_query",
+      28
+    ],
+    [
+      "optional_expand_count",
+      24
+    ],
+    [
+      "schema_search",
+      24
+    ],
+    [
+      "expand_aggregate",
+      24
+    ],
+    [
+      "compare",
+      10
+    ],
+    [
+      "repair_empty_result",
+      9
+    ],
+    [
+      "filter",
+      9
+    ],
+    [
+      "optional_count_by_pattern",
+      9
+    ],
+    [
+      "summarize_handle",
+      8
+    ]
+  ],
+  "total": 347
+}

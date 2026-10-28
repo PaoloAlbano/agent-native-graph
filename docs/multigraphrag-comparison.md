@@ -84,8 +84,16 @@ not every historical experimental condition identical.
 
 ### Saved Query Re-execution
 
-`results/cypherbench-company/query-reexecution/2026-10-26/` contains a manifest,
-100 golden-query executions and six files of 100 baseline-query executions.
+The currently selected evaluation,
+`results/cypherbench-company/query-reexecution/2026-10-28-qwen-matrix/`, contains
+a manifest, 100 golden-query executions and sixteen files of 100 baseline-query
+executions. It covers all nine current ANA full runs and all four requested
+Qwen3.5-27B profiles. The previous `2026-10-26/` and `2026-10-28/` evaluations
+remain unchanged as historical evidence. Repeating the ten previously evaluated
+baselines produced the same scores; six newly evaluated baselines complete the
+three new Qwen profile pairs. In total, 1,700 saved queries were attempted with
+no model calls. Missing future comparisons are still explicitly marked rather
+than silently borrowing another profile's baseline.
 It is a derived evaluation, not a new LLM run or a copy of the baseline archive.
 The source commit, trace checksums, QID hash, ANA run hashes, comparator checksum
 and graph-content fingerprints are recorded. Nodes, labels, properties, edge
@@ -108,6 +116,32 @@ Re-execution verifies the current common graph, not the undocumented historical
 graph used to generate the external queries. This is query-result correctness,
 not end-to-end answer judging or a controlled causal estimate of improvement.
 
+For the two October 27 ANA runs, the common metric on the pinned 100 QIDs is:
+
+| GPT-OSS-120B requested profile | ANA exact | Direct Cypher re-executed exact | Multi-agent re-executed exact |
+| --- | ---: | ---: | ---: |
+| temp 0, reasoning medium | 86/100 | 63/100 | 68/100 |
+| temp 1, reasoning off | 86/100 | 61/100 | 70/100 |
+
+These are not the full-split ANA scores of 302/347 and 295/347. The denominator
+and comparator are shared within this table, but historical generation
+conditions still differ as described above. Original judge scores remain in
+their own website table and are not substituted for these query-result scores.
+
+For the three October 28 Qwen3.5-27B runs, the same metric is now complete:
+
+| Qwen3.5-27B requested profile | ANA exact | Direct Cypher re-executed exact | Multi-agent re-executed exact |
+| --- | ---: | ---: | ---: |
+| temp 0, reasoning medium | 85/100 | 64/100 | 67/100 |
+| temp 1, reasoning off | 79/100 | 40/100 | 50/100 |
+| temp 1, reasoning medium | 87/100 | 59/100 | 62/100 |
+
+The corresponding direct/multi-agent query-error counts are 1/0, 2/8 and 2/4.
+Errors remain failures in the full denominator, not exclusions. These exact
+result scores do not replace the original source LLM-judge scores and are not
+the ANA full-split results of 290/347, 273/347 and 292/347. Individual questions
+and the three saved trajectories are available from each comparison page.
+
 To repeat without LLM calls, with the Company graph already loaded:
 
 ```bash
@@ -120,8 +154,8 @@ The output directory must not exist. Completed evidence can be selected through
 incomplete evaluations and mismatched checksums, source traces, or QID coverage.
 
 No original baseline archive is added to `results/`. External evidence remains sourced
-from its Git repository; the generated presentation lives under ignored `docs/`
-artifacts (or the clean CI output directory). Large JSON disclosures are lazy
+from its Git repository; sources under `docs/site/` generate the presentation
+under ignored `build/site/` (or the clean CI output directory). Large JSON disclosures are lazy
 and bounded, while complete generated records remain downloadable.
 
 ## Contributor Workflow

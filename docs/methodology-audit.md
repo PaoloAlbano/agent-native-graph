@@ -46,7 +46,7 @@ prompting.
 
 ## Historical Run Comparability
 
-The four archived manifests share task hash
+The four historical October 24-25 manifests share task hash
 `7b4c336e5a0e1f6441daf93031b7964d5ae48db7c00be03e9530aa4360bd964f`,
 graph hash `54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b`,
 and declared commit `0dbdd9c17fda4900a6f3f06e8fd4704ce46491a3`. They declare
@@ -62,3 +62,72 @@ The declared commit was captured by the archiver; it does not prove which
 uncommitted sources were executed at launch. Do not retroactively populate those
 fields or claim identical treatment is established. Existing runs remain useful
 historical observations. Future runs should follow [run-standard.md](run-standard.md).
+
+The two October 27 runs (GPT-OSS T0/medium and T1/none) follow that standard and
+retain their launch configuration in `run-config.json`, including effective
+prompt, tool, source and input hashes. They share commit
+`e34e0a45465f7229cc8a9b89820f5e081a6e5b2c` and concurrency 3, with matching
+recorded execution identities. They complete the requested profile matrix but
+do not retroactively establish equivalent historical conditions or provide
+within-profile replication. Requested thinking settings remain distinct from
+unobserved provider internals and served model revision.
+
+## October 28 Qwen Audit
+
+Three new Qwen3.5-27B runs cover exactly the same 347 unique Company questions.
+Their run/config checksums, failure subsets, recomputed summaries and input
+hashes were checked against the local task, schema and graph files. Their
+recorded execution identities match each other; source-tree, native catalog and
+prompt hashes distinguish effective code from the declared Git commit. Private
+gateway, local home path, secret-file path and the configured key value were
+not found in the new public artifacts. Raw logs remain outside the repository.
+
+The primary scores are 290/347 for T0/medium, 273/347 for T1/none and 292/347
+for T1/medium. All profiles use concurrency 3; the prior T0/none Qwen observation
+used 2 and does not have complete effective execution provenance. No claim of
+identical historical treatment or repeated-run significance follows.
+
+### Terminal Failures Versus Tool Errors
+
+The non-OK questions are 3, 10 and 5 respectively. Sixteen reach the 12-step
+limit without a final fetch; two T1/none questions raise `JSONDecodeError`.
+Those two archives stop after `schema_overview`, with two attempted LLM calls
+but metrics for only the first. This does not establish whether the second
+failure was HTTP-body decoding or tool-argument decoding; the failed payload
+was not retained. Do not claim malformed model arguments, exhausted tokens or
+a provider bug without additional evidence.
+
+There are 8, 6 and 4 questions with at least one timed-out tool call. Every one
+later fetches a final result, but only 0, 1 and 1 are correct. The static
+`backend_timeout` primary labels (8, 5 and 3) do not include correct recoveries.
+Most timeout steps are in `optional_expand_count` (7, 4 and 3); other affected
+operations include `expand` and one `repair_empty_result` call. This identifies
+a future backend investigation, not proof that every answer would become
+correct after removing the timeout.
+
+The AT&T shared-role question (`625ba586-61df-402a-97dd-4f176e9ded1f`) and the
+McDonald's CEO/board-count question (`b7aa6d83-68c1-4302-85ee-b905d6a43b9f`)
+exhaust the step budget in all three new profiles. The former repeatedly
+rebuilds role patterns; the latter repeatedly searches for the seed entity and
+changes traversal strategy. These are trajectory/planning candidates, not
+automatic evidence that a tool implementation is wrong. No tool descriptions,
+runner interventions, scoring rules or archived verdicts were changed during
+this audit. Detailed outputs remain in the run archives rather than a new
+Markdown report for every run.
+
+### Common-Metric Comparison Completed
+
+The selected `2026-10-28-qwen-matrix` query re-execution covers all nine ANA
+archives and sixteen matched external baseline runs on the pinned 100 QIDs.
+It contains 1,700 saved-query attempts including golden queries; no LLM calls
+were made. All queries pass the same read-only query-type gate, timeout and
+result-size policy; queries are not repaired. Graph content matches the dataset
+before execution and remains identical afterwards. Gold reproduction remains
+99/100 and the full denominator is retained.
+
+The ten previously evaluated baseline scores are reproduced unchanged. For
+Qwen T0/medium, T1/none and T1/medium, ANA/direct/multi-agent exact scores are
+85/64/67, 79/40/50 and 87/59/62 out of 100. The prior evaluations and full ANA
+archives were not rewritten. Source LLM-judge verdicts stay distinct from this
+query-result comparator, and historical model-generation conditions are still
+not a controlled causal comparison. See the [comparison protocol](multigraphrag-comparison.md).

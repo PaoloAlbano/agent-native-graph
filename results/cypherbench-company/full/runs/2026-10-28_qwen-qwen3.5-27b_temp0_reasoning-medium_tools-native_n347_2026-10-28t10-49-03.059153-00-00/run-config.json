@@ -1,0 +1,66 @@
+{
+  "concurrency": 3,
+  "configuration_sha256": "f36b1284bd499239cf543d31d4ed507c4bf630de1063375fec5330711ab84dd6",
+  "created_at": "2026-10-28T10:49:03.059153+00:00",
+  "git_commit": "e34e0a45465f7229cc8a9b89820f5e081a6e5b2c",
+  "identity": {
+    "libraries": {
+      "PyYAML": "6.0.3",
+      "httpx": "0.28.1",
+      "neo4j": "6.2.0"
+    },
+    "pyproject_sha256": "febc7dd3ad3c0791b8375cc8e5c3f4405d607c0cca894d3ac41b0865e1495aac",
+    "python": "3.12.11",
+    "source_tree_sha256": "45ac6ae0fb8053b869959975cf43652878675fd52f92916b9a7dde8c9a7a9968",
+    "system_prompt_sha256": "7c69732818cc545953a958cb7bac9d87a2e23c4e707ea5db295375f3cc87a82b",
+    "tools_sha256": "5334197563fb9260a3d88566883b48d29846ec83c75b936bee512d9ac93f1d97",
+    "uv_lock_sha256": "6b20dcb5d7507fad389f2fea0a065ab175db1b24756dc711335b058cbb2196b2"
+  },
+  "input_hashes": {
+    "graph": "54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b",
+    "schema": "be0598beb62dd4d516c813e1078c64b3b02683a6f42ac2762e8c8f0ebafaca35",
+    "tasks": "7b4c336e5a0e1f6441daf93031b7964d5ae48db7c00be03e9530aa4360bd964f"
+  },
+  "limit": 347,
+  "llm_settings": {
+    "enable_thinking": true,
+    "frequency_penalty": null,
+    "max_attempts": 3,
+    "max_tokens": 16000,
+    "presence_penalty": null,
+    "rate_limit_retry_s": 30.0,
+    "retry_base_s": 2.0,
+    "retry_low_effort_on_length": true,
+    "seed": null,
+    "stop": null,
+    "temperature": 0.0,
+    "thinking_effort": "medium",
+    "timeout_s": 60.0,
+    "tool_choice": "auto",
+    "top_p": null
+  },
+  "max_steps": 12,
+  "max_tokens": 16000,
+  "model": "Qwen/Qwen3.5-27B",
+  "options": {
+    "auto_fetch_on_done": false,
+    "enable_planning_tools": false,
+    "enable_runner_guardrails": false,
+    "enable_thinking": true,
+    "evaluation_fetch_all_pages": true,
+    "neo4j_query_timeout_s": 30,
+    "schema_entry": "overview",
+    "thinking_effort": "medium",
+    "wrapper_planning": false
+  },
+  "profile": "temp0-medium",
+  "profile_sha256": "7f389a53b90fa51f1b0d235973af8c8216ba6efea342dcebdd15c35978b4c7d3",
+  "provider": "openai-compatible",
+  "reasoning": "medium",
+  "task_signature_sha256": "5d34bf05e99fb05bb44aa9da41f6de6a2851bd60d3c8e575a3031cde1a901bd7",
+  "task_timeout_s": null,
+  "temperature": 0.0,
+  "tool_choice": "auto",
+  "tool_mode": "native",
+  "version": 2
+}

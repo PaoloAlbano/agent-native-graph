@@ -182,6 +182,40 @@ def test_actual_archive_summary_and_qids_are_consistent():
     assert all(len(r["records"]) == 347 for r in runs)
 
 
+def test_actual_standard_archives_preserve_provenance_and_failure_subsets():
+    from agent_native_graph.application.run_config import validate_results
+    from agent_native_graph.research.archive_result import _failure_record, _summary
+
+    runs = read_runs(ROOT)
+    indexed = json.loads((ROOT / "results/cypherbench-company/index.json").read_text())
+    assert {r["manifest"]["run_id"] for r in runs} == {r["run_id"] for r in indexed}
+    for run in runs:
+        folder = ROOT / ARCHIVE / run["manifest"]["run_id"]
+        if not (folder / "run-config.json").exists():
+            continue  # Historical provenance must not be reconstructed retroactively.
+        config = json.loads((folder / "run-config.json").read_text())
+        validate_results(run["records"], config)
+        assert "inputs" not in config and "runtime_identity" not in config
+        assert config["max_tokens"] == 16000 and config["tool_choice"] == "auto"
+        assert config["tool_mode"] == "native" and config["limit"] == 347
+        assert run["summary"] == json.loads(json.dumps(_summary(run["records"], folder.name)))
+        failures = [
+            json.loads(line) for line in (folder / "failures.jsonl").read_text().splitlines()
+        ]
+        assert failures == [
+            _failure_record(row) for row in run["records"] if not row["matches_answer_json"]
+        ]
+
+
+def test_qwen_archive_contains_all_four_requested_profiles():
+    profiles = {
+        (run["manifest"]["temperature"], run["manifest"]["reasoning"])
+        for run in read_runs(ROOT)
+        if run["manifest"]["model"] == "Qwen/Qwen3.5-27B"
+    }
+    assert {(0, "none"), (0, "medium"), (1, "none"), (1, "medium")} <= profiles
+
+
 def test_model_pages_group_runs_and_link_to_the_question_explorer(tmp_path):
     archive(tmp_path, "run-a")
     archive(tmp_path, "run-b")

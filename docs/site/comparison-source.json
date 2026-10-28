@@ -3,5 +3,5 @@
   "branch": "llm_calls_recap",
   "commit": "72fe7105310c85ebe6b1b3b7d4c6152ddb206393",
   "qid_file": "data/reference_company100_qids.json",
-  "execution_evaluation": "results/cypherbench-company/query-reexecution/2026-10-26"
+  "execution_evaluation": "results/cypherbench-company/query-reexecution/2026-10-28-qwen-matrix"
 }
