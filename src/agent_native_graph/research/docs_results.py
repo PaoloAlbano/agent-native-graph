@@ -27,6 +27,10 @@ PUBLIC_CONFIG = (
     "benchmark",
     "category",
     "split",
+    "configuration_sha256",
+    "run_config_sha256",
+    "run_profile",
+    "profile_sha256",
 )
 
 
@@ -42,6 +46,24 @@ def read_runs(root: Path) -> list[dict[str, Any]]:
         payload = (folder / "run.jsonl").read_bytes()
         if hashlib.sha256(payload).hexdigest() != manifest["run_sha256"]:
             raise ValueError(f"Checksum mismatch: {folder.name}")
+        if manifest.get("run_config_sha256"):
+            config_payload = (folder / "run-config.json").read_bytes()
+            if hashlib.sha256(config_payload).hexdigest() != manifest["run_config_sha256"]:
+                raise ValueError(f"Run configuration checksum mismatch: {folder.name}")
+            config = json.loads(config_payload)
+            for field in (
+                "model",
+                "temperature",
+                "reasoning",
+                "concurrency",
+                "max_tokens",
+                "max_steps",
+                "tool_mode",
+                "tool_choice",
+                "configuration_sha256",
+            ):
+                if config[field] != manifest[field]:
+                    raise ValueError(f"Run configuration {field} mismatch: {folder.name}")
         records = [json.loads(line) for line in payload.splitlines() if line.strip()]
         questions = {r["qid"]: (r["nl_question"], r["gold_cypher"], r["expected"]) for r in records}
         if len(records) != 347 or len(questions) != 347:

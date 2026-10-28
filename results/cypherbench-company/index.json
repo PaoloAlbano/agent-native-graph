@@ -50,5 +50,70 @@
     "run_id": "2026-10-25_qwen-qwen3.5-27b_temp0_reasoning-none_tools-native_n347_qwen35_temp0_full_n347",
     "suite": "full",
     "temperature": 0.0
+  },
+  {
+    "accuracy": 0.8703170028818443,
+    "avg_llm_calls": 5.1902017291066285,
+    "avg_tool_calls": 5.187319884726225,
+    "executable_rate": 0.9884726224783862,
+    "limit": 347,
+    "model": "openai/gpt-oss-120b",
+    "path": "full/runs/2026-10-27_openai-gpt-oss-120b_temp0_reasoning-medium_tools-native_n347_2026-10-27t20-30-54.912565-00-00",
+    "reasoning": "medium",
+    "run_id": "2026-10-27_openai-gpt-oss-120b_temp0_reasoning-medium_tools-native_n347_2026-10-27t20-30-54.912565-00-00",
+    "suite": "full",
+    "temperature": 0.0
+  },
+  {
+    "accuracy": 0.8501440922190202,
+    "avg_llm_calls": 5.221902017291066,
+    "avg_tool_calls": 5.219020172910663,
+    "executable_rate": 0.9884726224783862,
+    "limit": 347,
+    "model": "openai/gpt-oss-120b",
+    "path": "full/runs/2026-10-27_openai-gpt-oss-120b_temp1_reasoning-none_tools-native_n347_2026-10-27t20-58-50.991279-00-00",
+    "reasoning": "none",
+    "run_id": "2026-10-27_openai-gpt-oss-120b_temp1_reasoning-none_tools-native_n347_2026-10-27t20-58-50.991279-00-00",
+    "suite": "full",
+    "temperature": 1.0
+  },
+  {
+    "accuracy": 0.8357348703170029,
+    "avg_llm_calls": 5.599423631123919,
+    "avg_tool_calls": 5.599423631123919,
+    "executable_rate": 0.9913544668587896,
+    "limit": 347,
+    "model": "Qwen/Qwen3.5-27B",
+    "path": "full/runs/2026-10-28_qwen-qwen3.5-27b_temp0_reasoning-medium_tools-native_n347_2026-10-28t10-49-03.059153-00-00",
+    "reasoning": "medium",
+    "run_id": "2026-10-28_qwen-qwen3.5-27b_temp0_reasoning-medium_tools-native_n347_2026-10-28t10-49-03.059153-00-00",
+    "suite": "full",
+    "temperature": 0.0
+  },
+  {
+    "accuracy": 0.8414985590778098,
+    "avg_llm_calls": 5.734870317002882,
+    "avg_tool_calls": 5.734870317002882,
+    "executable_rate": 0.9855907780979827,
+    "limit": 347,
+    "model": "Qwen/Qwen3.5-27B",
+    "path": "full/runs/2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-medium_tools-native_n347_2026-10-28t12-03-16.667771-00-00",
+    "reasoning": "medium",
+    "run_id": "2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-medium_tools-native_n347_2026-10-28t12-03-16.667771-00-00",
+    "suite": "full",
+    "temperature": 1.0
+  },
+  {
+    "accuracy": 0.7867435158501441,
+    "avg_llm_calls": 6.152737752161383,
+    "avg_tool_calls": 6.1469740634005765,
+    "executable_rate": 0.9711815561959655,
+    "limit": 347,
+    "model": "Qwen/Qwen3.5-27B",
+    "path": "full/runs/2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-none_tools-native_n347_2026-10-28t11-36-33.015601-00-00",
+    "reasoning": "none",
+    "run_id": "2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-none_tools-native_n347_2026-10-28t11-36-33.015601-00-00",
+    "suite": "full",
+    "temperature": 1.0
   }
 ]

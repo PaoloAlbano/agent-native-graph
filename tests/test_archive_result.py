@@ -1,12 +1,15 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agent_native_graph.research.archive_result import (
     _archive_root,
     _failure_record,
     _refresh_index,
     _suite,
     _summary,
+    validate_run_rows,
 )
 
 
@@ -23,6 +26,9 @@ def test_diagnostic_runs_default_to_local_archive() -> None:
 
 
 def test_index_contains_only_full_runs_and_does_not_write_leaderboard(tmp_path: Path) -> None:
+    evaluation = tmp_path / "query-reexecution" / "example"
+    evaluation.mkdir(parents=True)
+    (evaluation / "manifest.json").write_text('{"status":"complete"}')
     for suite, limit in (("full", 347), ("n20", 20)):
         run_dir = tmp_path / suite / "runs" / suite
         run_dir.mkdir(parents=True)
@@ -54,6 +60,18 @@ def test_index_contains_only_full_runs_and_does_not_write_leaderboard(tmp_path: 
     index = json.loads((tmp_path / "index.json").read_text())
     assert [record["run_id"] for record in index] == ["full"]
     assert not (tmp_path / "leaderboard.md").exists()
+
+
+def test_archive_rejects_duplicate_qids(tmp_path):
+    with pytest.raises(ValueError, match="unique"):
+        validate_run_rows([{"qid": "a"}, {"qid": "a"}], 2, tmp_path / "missing")
+
+
+def test_archive_rejects_wrong_qid_set(tmp_path):
+    tasks = tmp_path / "tasks.jsonl"
+    tasks.write_text('{"qid":"a"}\n')
+    with pytest.raises(ValueError, match="task set"):
+        validate_run_rows([{"qid": "b"}], 1, tasks)
 
 
 def test_failure_record_exposes_category_for_jsonl_analysis() -> None:

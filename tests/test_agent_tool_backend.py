@@ -1,9 +1,9 @@
-import json
 import os
 from pathlib import Path
 from typing import Any
 
 import pytest
+from schema_fixture import company_schema
 
 from agent_native_graph.application.agent_loop import (
     _evaluation_fetch_all_pages,
@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
 def schema() -> dict[str, Any]:
-    return json.loads((ROOT / "data" / "company_schema.json").read_text(encoding="utf-8"))
+    return company_schema()
 
 
 @pytest.fixture()
@@ -2238,6 +2238,8 @@ def test_same_target_role_intersection_rejects_multi_named_targets_for_repeated_
 
 @pytest.fixture(scope="module")
 def backend(schema: dict[str, Any]) -> Any:
+    if os.getenv("ANA_TEST_NEO4J") != "1":
+        pytest.skip("Set ANA_TEST_NEO4J=1 to run Company integration tests")
     tool_backend = Neo4jGraphBackend(
         os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687"),
         os.getenv("NEO4J_USER", "neo4j"),

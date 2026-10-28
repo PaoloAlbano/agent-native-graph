@@ -4,7 +4,6 @@ from typing import Any
 
 from neo4j import GraphDatabase, Query
 
-from agent_native_graph.application.neo4j_benchmark import main
 from agent_native_graph.core.backend import AgentGraphBackend
 from agent_native_graph.core.graph_utils import (
     _ambiguous_relationship_only_constraints,
@@ -72,6 +71,7 @@ from agent_native_graph.core.graph_utils import (
 from agent_native_graph.core.handle_store import HandleStore
 from agent_native_graph.core.tooling import call_registered_tool
 from agent_native_graph.domain.handles import Handle
+from agent_native_graph.tools import load_tool_modules
 
 
 class Neo4jGraphBackend(AgentGraphBackend):
@@ -87,15 +87,25 @@ class Neo4jGraphBackend(AgentGraphBackend):
         *,
         query_timeout_s: int | None = None,
         schema_entry: str = "overview",
+        database: str | None = None,
+        handle_store: HandleStore | None = None,
     ) -> None:
+        super().__init__(handle_store=handle_store)
+        load_tool_modules()
         self._driver = GraphDatabase.driver(
             uri, auth=(user, password), connection_timeout=120.0, max_transaction_retry_time=120.0
         )
         self._schema = schema
         self._query_timeout_s = query_timeout_s
         self._schema_entry = schema_entry
-        self._handle_store = HandleStore()
+        self._database = database
+        self._closed = False
         self.last_fetch: list[list[Any]] | None = None
+
+    def _session(self) -> Any:
+        """Route every query to the configured database; preserve the driver default if unset."""
+        database = getattr(self, "_database", None)
+        return self._driver.session(**({"database": database} if database is not None else {}))
 
     def _ensure_handle_store(self) -> HandleStore:
         if not hasattr(self, "_handle_store"):
@@ -127,7 +137,10 @@ class Neo4jGraphBackend(AgentGraphBackend):
         self._ensure_handle_store().counter = value
 
     def close(self) -> None:
-        self._driver.close()
+        """Close this workflow once; its handles cannot be used afterwards."""
+        if not getattr(self, "_closed", False):
+            self._driver.close()
+            self._closed = True
 
     def _run(self, session: Any, query: str, **params: Any) -> Any:
         statement: str | Query
@@ -138,6 +151,8 @@ class Neo4jGraphBackend(AgentGraphBackend):
         return session.run(statement, **params)
 
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+        if getattr(self, "_closed", False):
+            raise RuntimeError("Graph backend is closed")
         result = self._call_impl(tool, args)
         self._record_handle_lineage(tool, args, result)
         return result
@@ -603,7 +618,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
 
     def _label_counts(self, labels: list[str]) -> dict[str, int]:
         counts: dict[str, int] = {}
-        with self._driver.session() as session:
+        with self._session() as session:
             for label in labels:
                 safe_label = _safe_name(label)
                 record = self._run(
@@ -742,7 +757,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         )
         rows = []
         candidates: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(
                 session,
                 query,
@@ -803,7 +818,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         limit = _int_arg(args, "limit", 1000, min_value=1)
         query = f"MATCH (n:`{label}` {{{prop}: $value}}) RETURN n LIMIT $limit"
         rows = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, value=value, limit=limit):
                 rows.append({var: _node_payload(record["n"]), "__rel_ids": []})
         return self._store(rows, focus=var)
@@ -841,7 +856,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             "LIMIT $limit"
         )
         rows: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(
                 session,
                 query,
@@ -888,7 +903,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             )
         query = f"MATCH (n:`{label}`) RETURN n LIMIT $limit"
         rows = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, limit=limit):
                 rows.append({var: _node_payload(record["n"]), "__rel_ids": []})
         return self._store(rows, focus=var)
@@ -897,7 +912,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         label = _safe_name(str(args["label"]))
         alias = _safe_name(str(args.get("alias") or f"{label.lower()}_count"))
         query = f"MATCH (n:`{label}`) RETURN count(n) AS `{alias}`"
-        with self._driver.session() as session:
+        with self._session() as session:
             record = self._run(session, query).single()
         rows = [{alias: int(record[alias]) if record else 0}]
         return self._store(rows, kind="table", columns=[alias])
@@ -956,7 +971,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             + " UNION ".join(query_parts)
             + " } RETURN count(DISTINCT entity_id) AS `count`"
         )
-        with self._driver.session() as session:
+        with self._session() as session:
             records = self._run(session, query, **params)
             record = records.single() if hasattr(records, "single") else next(iter(records), None)
         return int(record["count"]) if record else 0
@@ -1058,7 +1073,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         output: list[dict[str, Any]] = []
         pages = 0
         remaining = limit
-        with self._driver.session() as session:
+        with self._session() as session:
             for page_start in range(0, len(input_rows), page_size):
                 if remaining <= 0:
                     break
@@ -1144,7 +1159,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             "LIMIT $limit"
         )
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, source_ids=source_ids, limit=limit):
                 output.append({key: _tool_value(record[key]) for key in record.keys()})
         return self._store(output, kind="table", columns=_columns(output))
@@ -1208,7 +1223,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         query += f"RETURN row.row_index AS row_index, {count_expr} AS related_count "
         query += _limit_clause(args, params)
         counts_by_index: dict[int, int] = {row["row_index"]: 0 for row in input_rows}
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 counts_by_index[int(record["row_index"])] = int(record["related_count"] or 0)
 
@@ -1435,7 +1450,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         query += _limit_clause(args, params)
 
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 output.append({key: _tool_value(record[key]) for key in record.keys()})
         columns = [str(item.get("alias") or item["property"]) for item in group_by]
@@ -1503,7 +1518,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             query += f" ORDER BY {order_by}"
         query += _limit_clause(args, params)
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 output.append({key: _tool_value(record[key]) for key in record.keys()})
         return self._store(output, kind="table", columns=_columns(output))
@@ -1613,7 +1628,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             query += f" ORDER BY {order_by}"
         query += _limit_clause(args, params)
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 if default_focus:
                     output.append(
@@ -1912,7 +1927,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             query += " SKIP $offset LIMIT $limit"
 
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 if return_mode == "entities":
                     output.append({find_var: _tool_value(record[find_var]), "__rel_ids": []})
@@ -2034,7 +2049,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             query += f" ORDER BY {order_by}"
         query += _limit_clause(args, params)
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 output.append({key: _tool_value(record[key]) for key in record.keys()})
         return self._store(output, kind="table", columns=_columns(output))
@@ -2145,7 +2160,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             + " UNION ".join(branch_queries)
             + f" }} RETURN count(DISTINCT entity_id) AS `{alias}`"
         )
-        with self._driver.session() as session:
+        with self._session() as session:
             records = self._run(session, query, **params)
             record = records.single() if hasattr(records, "single") else next(iter(records), None)
         rows = [{alias: int(record[alias]) if record else 0}]
@@ -2644,7 +2659,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         query += f" RETURN {distinct_kw}{', '.join(return_items)} LIMIT $limit"
 
         output: list[dict[str, Any]] = []
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 if select:
                     row: dict[str, Any] = {}
@@ -2855,7 +2870,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             or _as_list(args.get("group_by"))
             or _as_list(args.get("metrics"))
         )
-        with self._driver.session() as session:
+        with self._session() as session:
             for record in self._run(session, query, **params):
                 if table_output:
                     output.append({key: _tool_value(record[key]) for key in record.keys()})
@@ -3214,9 +3229,16 @@ class Neo4jGraphBackend(AgentGraphBackend):
             )
 
     def _fetch(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Return a complete stored-handle page with a separate bounded preview."""
+        paging = {}
+        for name, default, minimum in (("limit", 1000, 1), ("offset", 0, 0)):
+            value = args.get(name)
+            value = default if value is None else value
+            if type(value) is not int or value < minimum:
+                raise ValueError(f"fetch {name} must be an integer >= {minimum}")
+            paging[name] = value
         handle = self._handle(str(args["from"]))
-        limit = _int_arg(args, "limit", 1000, min_value=1)
-        offset = _int_arg(args, "offset", 0, min_value=0)
+        limit, offset = paging["limit"], paging["offset"]
         handle_rows = handle.rows
         if (
             handle.focus
@@ -3243,8 +3265,11 @@ class Neo4jGraphBackend(AgentGraphBackend):
             ]
         self.last_fetch = data
         result = {
+            "contract_version": "ana-fetch-v1",
             "columns": columns,
-            "rows": data[:20],
+            "rows": data,
+            "preview": data[:20],
+            "preview_truncated": len(data) > 20,
             "returned_count": len(data),
             "offset": offset,
             "limit": limit,
@@ -3371,7 +3396,3 @@ def _coerce_filter_value(value: Any, value_type: Any) -> Any:
     if normalized_type == "integer":
         return int(value)
     return value
-
-
-if __name__ == "__main__":
-    main()

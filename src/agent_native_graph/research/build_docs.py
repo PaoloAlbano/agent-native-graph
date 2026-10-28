@@ -377,7 +377,7 @@ def build_site(
 ) -> Path:
     """Write owned site artifacts only; preserve Markdown and curated results."""
     repo_root = repo_root.resolve()
-    output_dir = output_dir or repo_root / "docs"
+    output_dir = output_dir or repo_root / "build" / "site"
     sources = repo_root / "docs" / "site"
     catalog = collect_catalog(repo_root)
     example = load_example(repo_root)
@@ -423,7 +423,7 @@ def build_site(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--out", type=Path, help="Defaults to <repo-root>/docs.")
+    parser.add_argument("--out", type=Path, help="Defaults to <repo-root>/build/site.")
     parser.add_argument(
         "--reference-repo",
         type=Path,

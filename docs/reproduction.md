@@ -1,277 +1,273 @@
 # Reproduction
 
-Install the project with `uv`:
+For the normal contribution workflow, follow [Contribute a Company Run](run-standard.md):
+one benchmark command and one archive command. This page covers setup and
+advanced diagnostics rather than duplicating that workflow.
 
-```bash
-uv sync --extra dev --extra service
-```
-
-Or use the Makefile:
+## Install and Configure
 
 ```bash
 make sync
 ```
 
+This uses `uv sync --locked --extra dev --extra service`. Set `NEO4J_URI`,
+`NEO4J_USER`, `NEO4J_PASSWORD`, and either `API_KEY` or `API_KEY_FILE` in your
+environment. The Makefile defaults to a local Neo4j and OpenRouter; override
+`BASE_URL` for another compatible gateway. Never commit real credentials or
+private service addresses. The key-file default is `/tmp/grapharrow-agent-key`.
 
-## Defaults used in recent investigation runs
-
-- `max_tokens`: 16000
-- `max_steps`: 12
-- deterministic profile: `temperature=0`
-- realistic profile: `temperature=1`, reasoning/thinking enabled, effort `medium`
-- default concurrency: 3, lowered for rate-limited models and raised only when stable
-- raw output directory: `/tmp/agent-native-graph-runs`
-- use `RESUME=1` with the same `OUT` path to continue an interrupted ANA or
-  baseline run; archive only after all 347 QIDs are present
-- API key env: `API_KEY`
-- API key file option: `--api-key-file /tmp/grapharrow-agent-key`
-
-The benchmark protocol is specified in `docs/benchmark-protocol.md`.
-
-The reference baseline is run from this repository using the sibling
-`multigraphrag` checkout. After `make load-company` and `make export-schema`, validate the shared task
-order and graph dump with `make baseline-check`. Then run `make baseline-run`
-once with `BASELINE_MODE=direct` and once with `BASELINE_MODE=agentic`, setting
-`MODEL`, `TEMPERATURE`, `REASONING`, `BASE_URL`, `API_KEY_FILE`, and unique
-`BASELINE_OUT` values. `RESUME=1` continues an interrupted output file.
-`make baseline-archive` verifies the complete qid set and stores the reference
-commit, graph hash, task hash, per-question rows and LLM call logs. The
-historical archived baseline runs have 347 questions; they are not the planned
-100-question external comparison. See the distinct
-[ANA full-split analysis](cypherbench-company-results.md) and
-[external comparison protocol](multigraphrag-comparison.md). A new static
-presentation will be built after that comparison is scored consistently.
-
-## Prepare/load data
-
-Build the CypherBench Company test tasks from Hugging Face:
+## Prepare Company Data
 
 ```bash
 make prepare-company-tasks
 ```
 
-Equivalent explicit command:
+This downloads CypherBench `test` and selects `graph == "company"`, currently
+347 questions, into `data/tasks_company_test.jsonl`. The task file is ignored.
+To select the published comparison subset, use the pinned QIDs, not `LIMIT=100`.
+
+The raw SimpleKG graph dump is not versioned. The official
+[CypherBench dataset](https://huggingface.co/datasets/megagonlabs/cypherbench)
+provides `graphs/simplekg/company_simplekg.json`. On a fresh checkout, download
+the full graph (not the sampled variant) from this fixed upstream revision:
 
 ```bash
-uv run --with datasets --with pandas --with pyarrow \
-  agent-native-graph prepare-company-tasks \
-  --from-hf \
-  --graph company \
-  --split test \
-  --out data/tasks_company_test.jsonl
+curl --fail --location --create-dirs \
+  --output downloads/company_simplekg.json \
+  'https://huggingface.co/datasets/megagonlabs/cypherbench/resolve/fd80c26a9f5447e4c9ba952cc70575544117306c/graphs/simplekg/company_simplekg.json'
 ```
 
-The current Neo4j loader expects a local SimpleKG graph dump at:
+Do not overwrite a local dump you need to preserve. Its expected SHA-256 for the
+current archives is
+`54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b`;
+the benchmark validates it and the loaded graph content. Task preparation above
+currently uses the upstream default revision, not this pinned graph revision;
+the runner records task hashes and the publisher rejects mismatched archived
+question sets. Do not assume a future upstream revision is the same experiment.
 
-```text
-downloads/company_simplekg.json
-```
-
-That raw graph file is intentionally not versioned in this repository. Place it
-there before loading Neo4j.
+Then load only a **dedicated disposable** database:
 
 ```bash
 make load-company
-```
-
-Generate the benchmark's local schema JSON and prompt from Neo4j:
-
-```bash
 make export-schema
 ```
 
-Equivalent explicit command:
+**`make load-company` clears the target database before loading.** Do not use
+it merely to check existing data. The benchmark itself verifies graph content
+and aborts on a mismatch; it never clears or repairs the graph.
+
+`export-schema` writes the benchmark's local schema JSON and prompt from Neo4j.
+Override `GRAPH`, `TASKS`, `SCHEMA_JSON` or `SCHEMA_PROMPT` when needed. These
+generated files stay local; curated run metadata records their hashes.
+
+## Run and Archive
 
 ```bash
-uv run agent-native-graph load-company \
-  --neo4j-uri bolt://127.0.0.1:7687 \
-  --neo4j-user neo4j \
-  --neo4j-password password \
-  --graph downloads/company_simplekg.json \
-  --clear \
-  --batch-size 2000
+make benchmark MODEL=openai/gpt-oss-120b PROFILE=temp0-none
 ```
 
-## Run agent-native tools
+The runner prints a new output path. Use it when archiving:
 
 ```bash
-make benchmark
+make archive-result OUT=/tmp/agent-native-graph-runs/the-printed-file.jsonl
 ```
 
-Equivalent explicit command:
+`PROFILE=temp1-medium` selects temperature 1 plus requested medium thinking;
+`CONCURRENCY` controls parallel requests. Model/profile parameters need not be
+repeated in the archive command. Full archives contain `manifest.json`,
+`summary.json`, `failures.jsonl`, `run.jsonl`, and, for new runs, `run-config.json`.
+Only complete curated 347-question runs go into the full archive. Diagnostics
+are sent to ignored `.local-results/` by the archiver. See
+[the run standard](run-standard.md) for resume, replicas, provenance and safety.
 
-```bash
-uv run agent-native-graph benchmark-neo4j \
-  --tasks data/tasks_company_test.jsonl \
-  --schema-json data/company_schema.json \
-  --out /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b_temp0.jsonl \
-  --limit 100 \
-  --native-tools \
-  --model openai/gpt-oss-120b \
-  --api-key-file /tmp/grapharrow-agent-key \
-  --max-tokens 16000 \
-  --max-steps 12 \
-  --concurrency 3
-```
+## Advanced Diagnostics
 
-By convention, raw benchmark outputs are written outside the repository first,
-usually under `/tmp/agent-native-graph-runs`. Promote only complete, curated
-runs into `results/` with `make archive-result`.
-
-## Run the full Company split
-
-The current CypherBench Company test slice has 347 examples in this repository.
-
-```bash
-make benchmark-full \
-  MODEL=openai/gpt-oss-120b \
-  LIMIT=347 \
-  CONCURRENCY=5 \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp0_reasoning_none_n347.jsonl
-```
-
-Archive the completed run:
-
-```bash
-make archive-result \
-  MODEL=openai/gpt-oss-120b \
-  LIMIT=347 \
-  TEMPERATURE=0 \
-  REASONING=none \
-  CONCURRENCY=5 \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp0_reasoning_none_n347.jsonl
-```
-
-This writes:
-
-```text
-results/cypherbench-company/full/runs/<run_id>/
-  manifest.json
-  summary.json
-  failures.jsonl
-  run.jsonl
-```
-
-and refreshes:
-
-```text
-results/cypherbench-company/index.json
-```
-
-## Run temp 1 + reasoning
-
-```bash
-make benchmark-temp1
-```
-
-Equivalent explicit command:
+For a short local check, use the direct runner without a fixed Company profile:
 
 ```bash
 uv run agent-native-graph benchmark-neo4j \
   --tasks data/tasks_company_test.jsonl \
   --schema-json data/company_schema.json \
-  --out /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b_temp1_reasoning.jsonl \
-  --limit 100 \
-  --native-tools \
-  --model openai/gpt-oss-120b \
-  --api-key-file /tmp/grapharrow-agent-key \
-  --temperature 1 \
-  --enable-thinking \
-  --thinking-effort medium \
-  --max-tokens 16000 \
-  --max-steps 12 \
-  --concurrency 3
+  --model your_model --limit 20 --native-tools --tool-choice auto \
+  --out /tmp/ana-diagnostic.jsonl --max-tokens 16000 --max-steps 12
 ```
 
-The same profile can be run through the generic target:
+The output path must be new. It also has a metadata sidecar, so archiving can
+read its actual settings. Diagnostics are not full Company evidence. Historical
+raw files without sidecars require the direct `archive-result` CLI with the
+original model/profile parameters, not guesses; do not invent missing metadata.
+
+For deterministic answer comparison after execution:
 
 ```bash
-make benchmark-full \
-  MODEL=openai/gpt-oss-120b \
-  LIMIT=347 \
-  TEMPERATURE=1 \
-  THINKING=1 \
-  THINKING_EFFORT=medium \
-  REASONING=medium \
-  CONCURRENCY=5 \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp1_reasoning_medium_n347.jsonl
+make evaluate OUT=/tmp/ana-diagnostic.jsonl
 ```
 
-Archive with the same profile metadata:
+This comparison is deterministic; model inference at temperature zero is not
+guaranteed to be. See [benchmark-protocol.md](benchmark-protocol.md).
+
+## Tests and Documentation
 
 ```bash
-make archive-result \
-  MODEL=openai/gpt-oss-120b \
-  LIMIT=347 \
-  TEMPERATURE=1 \
-  REASONING=medium \
-  CONCURRENCY=5 \
-  OUT=/tmp/agent-native-graph-runs/company_gpt_oss_120b_temp1_reasoning_medium_n347.jsonl
-```
-
-## Test another model
-
-Override `MODEL`, `OUT`, and often `CONCURRENCY`. Keep all other settings fixed
-when comparing models.
-
-```bash
-make benchmark-full \
-  MODEL=Qwen/Qwen3.6-27B \
-  LIMIT=347 \
-  CONCURRENCY=1 \
-  OUT=/tmp/agent-native-graph-runs/company_qwen3_6_27b_temp0_reasoning_none_n347.jsonl
-```
-
-For providers that rate-limit native tool calls, lower `CONCURRENCY` first
-instead of changing the benchmark protocol.
-
-## Evaluate
-
-```bash
-make evaluate
-```
-
-Equivalent explicit command:
-
-```bash
-uv run agent-native-graph evaluate-run --run /tmp/agent-native-graph-runs/agent_tools_first100_gpt_oss_120b_temp0.jsonl
-```
-
-## Unit tests
-
-```bash
+make lint
 make test
+make docs-build
 ```
 
-Equivalent explicit commands:
+Offline contract tests use a versioned synthetic schema and need neither
+Neo4j nor `data/company_schema.json`. Opt in to real Company integration tests
+only against the prepared dataset:
 
 ```bash
-uv run pytest tests/test_agent_tool_backend.py -q
-uv run pytest tests/test_tool_quality_analysis.py -q
+make test-backend
 ```
 
-## Useful overrides
+This sets `ANA_TEST_NEO4J=1`; unavailable integrations are reported as skipped,
+not certified by the unit-test pass. Documentation build uses curated archives
+and a pinned external Git source; no inference or database connection is needed.
 
-Make targets use variables that can be overridden from the command line:
+## External Baselines
+
+The [published external comparison](multigraphrag-comparison.md) uses exactly
+the pinned 100 Company QIDs. Its original judge scores and derived exact query
+re-execution scores are distinct metrics.
+
+The separate local research harness also supports `make baseline-check`,
+`make baseline-run BASELINE_MODE=direct` and `BASELINE_MODE=agentic`, using the
+sibling `multigraphrag` checkout. Configure its `MODEL`, `TEMPERATURE`,
+`REASONING`, `BASE_URL`, `API_KEY_FILE` and unique `BASELINE_OUT`. Its default
+347-question runs are not the published 100-QID experiment. Follow the comparison
+guide's source/QID contract, not that harness alone, when contributing a new
+published comparison.
+
+### Pinned Source And Shared Provider
+
+Opt in explicitly to the foundation adapter using a model-independent YAML
+profile and a full reference Git commit (the commit must already exist locally):
 
 ```bash
-make benchmark MODEL=Qwen/Qwen3.6-27B LIMIT=100 CONCURRENCY=1 OUT=/tmp/agent-native-graph-runs/qwen36_first100.jsonl
-make evaluate OUT=/tmp/agent-native-graph-runs/qwen36_first100.jsonl
+make baseline-check BASELINE_PROFILE=temp0-none REFERENCE_COMMIT=<full-40-character-sha>
+make baseline-run BASELINE_MODE=single BASELINE_PROFILE=temp0-none \
+  REFERENCE_COMMIT=<full-40-character-sha> MODEL=<model-id> BASELINE_OUT=<new-output.jsonl>
 ```
 
-## Inspect curated results
+`baseline-check` does not read an API key or call a model. It validates task
+contents and graph dump identity, discovers the live schema, and executes a
+read-only scoring probe. It does **not** verify the entire loaded graph against
+the dump. Make installs reference dependencies through the project's `reference`
+extra; the sibling checkout supplies source and data, not its Python environment.
+The current pinned reference source requires Python 3.12 or newer. For direct
+CLI use, run `uv run --extra reference agent-native-graph baseline-run ...`.
+Committed source/configuration files are exported to a temporary directory;
+uncommitted reference code is not executed and its branch is not switched.
+Datasets are read from the original checkout. The sidecar records source-file,
+adapter, provider, input and profile hashes plus installed dependency versions;
+it records neither credentials nor endpoint URLs. A changed identity rejects
+resume, including an old sidecar without these fields.
 
-Machine-readable metadata lives in:
+With `BASELINE_PROFILE`, every reference role uses ANA's provider, call settings,
+timeouts and HTTP retry policy; profile settings override the legacy generation
+flags. Structured generation still uses the pinned reference JSON parser
+(including its existing recovery rules). The reference workflows, including the
+prose interpreter, are unchanged. The profile path never restarts a whole question
+on HTTP 429; only the shared provider retries the request. Without a profile,
+the reference's legacy LLM client and workflow-level retries remain available
+and are identified as `reference-legacy` in metadata.
 
-```text
-results/cypherbench-company/index.json
-```
+Both paths now use named-database, EXPLAIN-classified read queries, explicit
+transaction timeouts, rollback and a streaming hard row cap during candidate
+execution, introspection and final scoring. Over-limit results are errors, never
+partial answers. The default cap is 100,000 rows with a profile, 10,000 without;
+the CLI allows `--max-score-rows` and `--database`. This is a research guard,
+not a replacement for database read-only credentials and procedure permissions.
 
-Each archived run includes:
+This is **foundation-only**, not compliance with the
+[controlled Company protocol](controlled-company-protocol.md). Shared generation
+budgets, global HTTP concurrency, common approved deadline values,
+canonical observations and retrieval-only variants still require implementation.
+No historical results are rewritten by these commands.
 
-- `manifest.json`: model, provider, temperature, reasoning, tool mode, limit,
-  hash, and git commit.
-- `summary.json`: accuracy, executable rate, tool/LLM calls, token usage, and
-  failure class counts.
-- `failures.jsonl`: non-matching rows with `failure_category` for analysis.
-- `run.jsonl`: complete per-task transcript and outputs.
+### Request Accounting
+
+New ANA runs and profile-enabled reference baselines save `request_accounting`
+per question. This is passive instrumentation: it does not change tool/prompt
+payloads, stopping limits, sampling, HTTP retries or fallback behavior. Legacy
+baseline transport is not instrumented and records `null`; historical archives
+are not backfilled and must not be interpreted as zero consumption.
+
+The ledger distinguishes a logical provider call from each actual HTTP POST,
+including failed requests, transport retries and low-effort length fallbacks.
+`observed_completion_responses` counts returned completion responses, including
+discarded length responses; it cannot reveal generations whose response was lost.
+Reference calls are labeled by role. It records status codes, error class,
+finish reason, elapsed time and numeric token usage, but no API keys, endpoint
+URLs, prompts, responses or exception messages. Those question/response traces
+remain in their existing benchmark artifacts, not in the accounting ledger.
+
+Use `request_accounting.summary.observed_usage_totals` for observed request-level
+usage, including discarded initial responses before a fallback. The older
+`llm_metric_summary` / `llm_*tokens` fields retain their historical semantics
+(returned-response usage) for compatibility; do not add those totals together.
+`attempts_without_usage` and `usage_field_coverage` distinguish unavailable token
+counts from actual reported zero. No token estimate or model-price estimate is
+invented for failed requests whose usage is unavailable.
+
+Question rows retain request observations even when the provider raises before
+returning `__chat_meta`. Archive summaries aggregate only instrumented ledgers
+and report coverage of legacy/uninstrumented rows. Latency sums are service
+time across calls, not batch wall time, because roles/questions can overlap.
+
+Profile-enabled reference roles now await `provider.achat()` directly, not a
+synchronous client in `asyncio.to_thread`. Cancellation closes the async client;
+the question waits for active sibling requests to settle before saving its
+ledger. The harness also records cancelled in-flight questions before closing
+the output file. `requests_settled` describes client requests, not confirmed
+remote-server cancellation or complete billing information.
+Batch helpers also cancel and drain work still queued at their semaphore;
+successful batch ordering and concurrency limits remain unchanged.
+
+Custom callers that still put synchronous `provider.chat()` in a thread cannot
+cancel that thread by cancelling its await. Such snapshots retain pending flags
+and remain incomplete. Use `await provider.achat()` in asynchronous applications.
+Durable recovery after process crashes or forced termination remains future work.
+
+No full benchmark rerun is needed to preserve historical quality results.
+Unit/integration tests check payload equality, failure and retry accounting,
+per-question isolation and the real pinned workflows with simulated responses.
+Only small inference smoke tests are needed for gateway compatibility. New
+metrics become available for future runs; old missing metrics stay unknown.
+
+### Timeouts And Cancellation
+
+The YAML `timeout_s` remains the HTTP client's per-operation timeout. It is
+distinct from the total elapsed-time allowance for a question, which includes
+retry waits and length fallbacks. Neither sampling nor retry decisions change
+when requests complete within their existing limits.
+
+ANA's diagnostic `--task-timeout-s N` now works at concurrency above one without
+process-global signals. A worker with an explicit deadline uses cancellable
+async HTTP internally, then closes it before returning its result. The default
+is still no task deadline, and standard Company profiles still reject custom
+task-timeout overrides. A task timeout is classified as `task_timeout`, distinct
+from a backend query timeout. Requested deadlines are saved even with concurrency.
+
+Profile-enabled reference runs retain `--task-timeout` (default 240 seconds),
+but apply it once to the question, including final query scoring, rather than
+giving scoring extra time. One monotonic deadline is inherited by every role;
+retry waits and active requests are interruptible. The legacy unprofiled path
+retains its separate per-generation-attempt timeout behavior and is labeled
+`reference-legacy`; it is not certified by the new request-lifecycle tests.
+
+ANA's graph tools are still synchronous: deadline checks occur before/after
+each tool, including final pagination. An already-running synchronous Neo4j
+query is not forcibly killed by the question deadline; it retains its separate
+query timeout (normally 30 seconds), so cleanup can overrun the question limit.
+This is not a hard real-time execution guarantee or a common 900-second study
+policy. Shared approved values and global endpoint admission remain pending.
+
+Closing an HTTP connection stops client work and prevents subsequent retries;
+it cannot guarantee that a remote gateway stops model computation. That needs
+provider-supported abort semantics. Tests use mock transports and a real local
+TCP server to verify socket closure, no leaked sibling requests, settled ledgers,
+and unchanged sync/async payloads across all four profiles. No full inference
+rerun is required for these lifecycle checks.

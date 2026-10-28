@@ -1,0 +1,104 @@
+{
+  "accuracy": 0.8703170028818443,
+  "avg_llm_calls": 5.1902017291066285,
+  "avg_tool_calls": 5.187319884726225,
+  "executable_rate": 0.9884726224783862,
+  "failure_classes": {
+    "backend_timeout": 6,
+    "json_decode": 1,
+    "no_final_fetch_or_max_steps": 3,
+    "semantic_mismatch": 34,
+    "unbound_variable": 1
+  },
+  "failure_total": 45,
+  "llm_completion_tokens": 673536,
+  "llm_prompt_tokens": 39452984,
+  "llm_total_tokens": 40126520,
+  "matches": 302,
+  "ok": 343,
+  "run_id": "2026-10-27_openai-gpt-oss-120b_temp0_reasoning-medium_tools-native_n347_2026-10-27t20-30-54.912565-00-00",
+  "tool_errors": 18,
+  "top_tools": [
+    [
+      "schema_overview",
+      347
+    ],
+    [
+      "fetch",
+      343
+    ],
+    [
+      "entity_resolve",
+      222
+    ],
+    [
+      "expand",
+      207
+    ],
+    [
+      "pattern_query",
+      160
+    ],
+    [
+      "constraint_query",
+      97
+    ],
+    [
+      "project",
+      88
+    ],
+    [
+      "entity_set_operation",
+      62
+    ],
+    [
+      "value_search",
+      46
+    ],
+    [
+      "schema_search",
+      40
+    ],
+    [
+      "count_handle",
+      35
+    ],
+    [
+      "same_target_role_intersection",
+      29
+    ],
+    [
+      "optional_expand_count",
+      25
+    ],
+    [
+      "optional_count_by_pattern",
+      18
+    ],
+    [
+      "expand_aggregate",
+      14
+    ],
+    [
+      "group_handle",
+      10
+    ],
+    [
+      "inspect_paths",
+      8
+    ],
+    [
+      "filter",
+      8
+    ],
+    [
+      "compare",
+      6
+    ],
+    [
+      "schema_describe_label",
+      6
+    ]
+  ],
+  "total": 347
+}

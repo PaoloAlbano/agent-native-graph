@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from uuid import uuid4
 
 from agent_native_graph.core.graph_utils import (
     _columns,
@@ -16,10 +17,16 @@ from agent_native_graph.domain.handles import Handle
 class HandleStore:
     """Owns intermediate handles and their lineage across tool calls."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, namespace: str | None = None) -> None:
+        self.namespace = namespace
         self.handles: dict[str, Handle] = {}
         self.lineage: dict[str, list[dict[str, Any]]] = {}
         self.counter = 0
+
+    @classmethod
+    def isolated(cls) -> "HandleStore":
+        """Create an opaque workflow namespace; the plain constructor retains legacy IDs."""
+        return cls(namespace=uuid4().hex)
 
     def store(
         self,
@@ -33,7 +40,7 @@ class HandleStore:
         """Store rows and return the public descriptor given back to the agent."""
 
         self.counter += 1
-        handle_id = f"h{self.counter}"
+        handle_id = f"h{self.namespace}-{self.counter}" if self.namespace else f"h{self.counter}"
         handle = Handle(
             id=handle_id,
             rows=rows,
@@ -73,6 +80,11 @@ class HandleStore:
                 "project, or a more specific server-side graph query first."
             )
         return result
+
+    def clear(self) -> None:
+        """Release workflow data and lineage when its owner closes the session."""
+        self.handles.clear()
+        self.lineage.clear()
 
     def get(self, handle_id: str) -> Handle:
         """Return an existing handle or raise an agent-actionable error."""

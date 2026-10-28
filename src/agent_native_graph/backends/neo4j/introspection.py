@@ -17,18 +17,21 @@ class Neo4jSchemaIntrospector(GraphSchemaIntrospector):
         password: str,
         *,
         query_timeout_s: int | None = None,
+        database: str | None = None,
     ) -> None:
         self._driver = GraphDatabase.driver(
             uri, auth=(user, password), connection_timeout=120.0, max_transaction_retry_time=120.0
         )
         self._query_timeout_s = query_timeout_s
+        self._database = database
 
     def close(self) -> None:
         self._driver.close()
 
     def introspect_schema(self) -> dict[str, Any]:
         try:
-            with self._driver.session() as session:
+            options = {"database": self._database} if self._database is not None else {}
+            with self._driver.session(**options) as session:
                 labels = [
                     str(record["label"])
                     for record in self._run(
@@ -121,6 +124,7 @@ def introspect_schema(
     password: str,
     *,
     query_timeout_s: int | None = None,
+    database: str | None = None,
 ) -> dict[str, Any]:
     """Build the ANA schema payload directly from Neo4j metadata."""
     return Neo4jSchemaIntrospector(
@@ -128,4 +132,5 @@ def introspect_schema(
         user,
         password,
         query_timeout_s=query_timeout_s,
+        database=database,
     ).introspect_schema()

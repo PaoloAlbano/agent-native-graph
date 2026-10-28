@@ -16,21 +16,25 @@ make docs-serve
 
 Open `http://127.0.0.1:8000`. Override the local port with `DOCS_PORT=8001`.
 
-The build writes `docs/index.html`, `docs/results.html`, `docs/model-*.html`,
-`docs/run-*.html`, the site/results CSS and
-JavaScript under `docs/assets/`, `docs/data/tool-catalog.json`,
-`docs/data/example-trajectory.json`, `docs/data/results/`, and `docs/.nojekyll`.
-It leaves the Markdown documentation and benchmark evidence intact. Generated
-files are ignored locally; GitHub Actions assembles and deploys the Pages
-artifact. No database, inference endpoint, or API key is needed to build.
+The build writes generated HTML, assets, JSON projections and `.nojekyll` into
+the ignored `build/site/` directory, both locally and in CI. `docs/` contains
+only public Markdown and editable site sources. It is not the output directory.
+The Markdown documentation and benchmark evidence remain intact. GitHub Actions
+assembles and deploys the generated artifact. No database, inference endpoint,
+or API key is needed to build. Override `DOCS_OUT` for another build directory;
+`make docs-serve` serves that same directory.
 
-The workflow `.github/workflows/docs.yml` validates pull requests and publishes
-pushes to `main`. Select **GitHub Actions** as the Pages source in repository
+The workflow `.github/workflows/docs.yml` calls the reusable code checks in
+`.github/workflows/ci.yml`: lint/format first, then Python and browser tests in
+separate named jobs. Only successful code checks allow **Build Documentation**;
+**Publish GitHub Pages** runs only on `main`, never from pull requests. The test
+job does not need the external comparison checkout or model/database secrets.
+Select **GitHub Actions** as the Pages source in repository
 settings. CI builds into `build/site/` so only generated public site artifacts
 are uploaded. Editorial Markdown files remain available through repository links.
 
 To contribute a Company run, add its complete archive (`manifest.json`,
-`summary.json`, `failures.jsonl`, `run.jsonl`) under
+`summary.json`, `failures.jsonl`, `run.jsonl`, `run-config.json`) under
 `results/cypherbench-company/full/runs/<unique-run-id>/` and open a pull request.
 The workflow validates and builds the site without publishing from pull requests.
 After merge to `main`, it rebuilds and publishes Pages automatically. No hand
@@ -38,6 +42,10 @@ editing of generated HTML or model lists is needed. New models without matching
 external baselines remain visible under ANA results; comparison availability is
 reported explicitly instead of blocking the site build. A historical saved
 query evaluation is not silently extended to new ANA runs.
+
+New runs should use [the frozen run workflow](../run-standard.md) and also carry
+`run-config.json`; its checksum and profile consistency are checked during the
+build. Historical four-file archives remain supported without invented metadata.
 
 Section 1 documents the current tool surface. Section 2 is a static multipage
 site: `results.html` lists models, `model-*.html` lists a model's runs, and
@@ -94,3 +102,7 @@ The source repo is read through Git objects, not mutable local files. No data is
 written into `results/`. Missing source evidence is explicit, never replaced by
 invented scores. Original exact-answer and LLM-judge verdicts are kept separate;
 see [the comparison protocol](../multigraphrag-comparison.md) for limitations.
+
+The separate common-metric table reads committed query-reexecution evidence,
+not a fresh database query during build. It measures baseline query-result
+correctness using ANA's exact comparator, not final textual-answer judging.

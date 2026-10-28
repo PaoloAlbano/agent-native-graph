@@ -9,6 +9,8 @@ temporary benchmark output, and curated evidence.
 - `tests/`: backend/tool-contract tests.
 - `docs/`: methodology, results summaries, and tool contracts.
 - `results/`: selected benchmark outputs referenced by docs.
+- `tests/schema_fixture.py`: synthetic schema for offline tests, not downloaded
+  graph data. `data/reference_company100_qids.json` is also explicitly versioned.
 - `pyproject.toml`, `uv.lock`, `Dockerfile`, `README.md`.
 
 ## Ignored by default
@@ -17,6 +19,8 @@ temporary benchmark output, and curated evidence.
 - `scripts/`: local fixes, discovery, and historical experiments.
 - `data/*.json`, `data/*.jsonl`, `data/*.txt`: generated task/schema files.
 - virtualenvs, caches, logs, build artifacts.
+- `.local-notes/`: private roadmaps, collaboration decisions and session diaries.
+  Public contributor instructions and scientific caveats remain in `docs/`.
 
 ## Outside the repository
 
@@ -28,3 +32,9 @@ temporary benchmark output, and curated evidence.
 A run should be promoted from temporary storage to `results/` only when it is
 comparable, complete, and documented with model, profile, limit, scoring metric,
 and known caveats.
+
+New full runs use [the frozen run standard](run-standard.md). Complete derived
+query-reexecution evaluations are versionable in their separate archive; they
+are not partial ANA runs. Generated static HTML/assets/JSON are ignored; their
+sources under `docs/site/` are versioned. Both local and CI builds write output
+to ignored `build/site/`, not back into `docs/`.

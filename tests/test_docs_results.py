@@ -95,6 +95,43 @@ def test_publish_preserves_records_and_sources_and_escapes_html(tmp_path):
     assert before == {p: p.read_bytes() for p in folder.iterdir()}
 
 
+def test_standard_run_config_is_validated(tmp_path):
+    folder, _ = archive(tmp_path)
+    manifest_path = folder / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(
+        concurrency=3,
+        max_tokens=16000,
+        max_steps=12,
+        tool_mode="native",
+        tool_choice="auto",
+        configuration_sha256="frozen-config",
+    )
+    payload = json.dumps(
+        {
+            k: manifest[k]
+            for k in (
+                "model",
+                "temperature",
+                "reasoning",
+                "concurrency",
+                "max_tokens",
+                "max_steps",
+                "tool_mode",
+                "tool_choice",
+                "configuration_sha256",
+            )
+        }
+    ).encode()
+    (folder / "run-config.json").write_bytes(payload)
+    manifest["run_config_sha256"] = hashlib.sha256(payload).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    assert len(read_runs(tmp_path)) == 1
+    (folder / "run-config.json").write_text("{}")
+    with pytest.raises(ValueError, match="configuration checksum"):
+        read_runs(tmp_path)
+
+
 def test_checksum_mismatch_is_rejected(tmp_path):
     folder, _ = archive(tmp_path)
     with (folder / "run.jsonl").open("a") as stream:
@@ -143,6 +180,40 @@ def test_actual_archive_summary_and_qids_are_consistent():
     runs = read_runs(ROOT)
     assert len(runs) >= 4
     assert all(len(r["records"]) == 347 for r in runs)
+
+
+def test_actual_standard_archives_preserve_provenance_and_failure_subsets():
+    from agent_native_graph.application.run_config import validate_results
+    from agent_native_graph.research.archive_result import _failure_record, _summary
+
+    runs = read_runs(ROOT)
+    indexed = json.loads((ROOT / "results/cypherbench-company/index.json").read_text())
+    assert {r["manifest"]["run_id"] for r in runs} == {r["run_id"] for r in indexed}
+    for run in runs:
+        folder = ROOT / ARCHIVE / run["manifest"]["run_id"]
+        if not (folder / "run-config.json").exists():
+            continue  # Historical provenance must not be reconstructed retroactively.
+        config = json.loads((folder / "run-config.json").read_text())
+        validate_results(run["records"], config)
+        assert "inputs" not in config and "runtime_identity" not in config
+        assert config["max_tokens"] == 16000 and config["tool_choice"] == "auto"
+        assert config["tool_mode"] == "native" and config["limit"] == 347
+        assert run["summary"] == json.loads(json.dumps(_summary(run["records"], folder.name)))
+        failures = [
+            json.loads(line) for line in (folder / "failures.jsonl").read_text().splitlines()
+        ]
+        assert failures == [
+            _failure_record(row) for row in run["records"] if not row["matches_answer_json"]
+        ]
+
+
+def test_qwen_archive_contains_all_four_requested_profiles():
+    profiles = {
+        (run["manifest"]["temperature"], run["manifest"]["reasoning"])
+        for run in read_runs(ROOT)
+        if run["manifest"]["model"] == "Qwen/Qwen3.5-27B"
+    }
+    assert {(0, "none"), (0, "medium"), (1, "none"), (1, "medium")} <= profiles
 
 
 def test_model_pages_group_runs_and_link_to_the_question_explorer(tmp_path):

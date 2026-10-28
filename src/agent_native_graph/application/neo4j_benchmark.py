@@ -1,6 +1,5 @@
 import argparse
 import json
-import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_native_graph.application.agent_loop import (
+    _benchmark_fetch_preview,
     _evaluation_fetch_all_pages,
     _guarded_action,
     _latest_fetchable_handle,
@@ -20,8 +20,21 @@ from agent_native_graph.application.metrics import (
     _update_summary,
     classify_failure,
 )
+from agent_native_graph.application.run_config import (
+    apply_profile,
+    config_path,
+    llm_settings_for_run,
+    new_output,
+    profile_names,
+    result_signature,
+    run_lock,
+    save_config,
+    task_signature,
+)
 from agent_native_graph.core.graph_utils import _requires_wrapper_planning
 from agent_native_graph.core.tool_specs import SCHEMA_ENTRY_MODES
+from agent_native_graph.llm_providers.accounting import RequestAccounting, account_requests
+from agent_native_graph.llm_providers.execution import Deadline, TaskTimeoutError, deadline_scope
 from agent_native_graph.research_common import (
     ChatClient,
     add_llm_args,
@@ -36,17 +49,30 @@ from agent_native_graph.research_common import (
 )
 
 
-class TaskTimeoutError(TimeoutError):
-    pass
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     add_neo4j_args(parser)
     add_llm_args(parser)
     parser.add_argument("--tasks", type=Path, required=True)
     parser.add_argument("--schema-json", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Existing path only with --resume; otherwise generated automatically",
+    )
+    parser.add_argument("--run-dir", type=Path, default=Path("/tmp/agent-native-graph-runs"))
+    parser.add_argument(
+        "--profile",
+        choices=profile_names(),
+        help="Name of a YAML file in agent_native_graph/profiles",
+    )
+    parser.add_argument("--provider-tag", default="openai-compatible")
+    parser.add_argument("--graph-file", type=Path, default=Path("downloads/company_simplekg.json"))
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Validate inputs/save metadata, without Neo4j or LLM calls",
+    )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--task-timeout-s", type=int)
@@ -54,7 +80,7 @@ def main() -> None:
     parser.add_argument("--native-tools", action="store_true")
     parser.add_argument(
         "--tool-choice",
-        choices=["auto", "required"],
+        choices=["auto", "required", "none"],
         default="auto",
         help=(
             "Native tool-call selection policy. Use auto for realistic agent runs; "
@@ -99,25 +125,59 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
+    apply_profile(args)
+    if args.concurrency < 1:
+        parser.error("--concurrency must be positive")
+    if args.task_timeout_s is not None and args.task_timeout_s <= 0:
+        parser.error("--task-timeout-s must be positive")
+    if args.resume and args.out is None:
+        parser.error("--resume requires the original --out path")
+    args.out = args.out or new_output(args.run_dir, args.model, args.profile)
+    _log(f"OUTPUT {args.out}")
+    with run_lock(args.out):
+        if (args.out.exists() or config_path(args.out).exists()) and not args.resume:
+            raise ValueError("Output already exists; choose a new path or use --resume")
+        tasks = limited_tasks(read_jsonl(args.tasks), args.limit)
+        schema = json.loads(args.schema_json.read_text(encoding="utf-8"))
+        save_config(args, tasks, Path.cwd())
+        if args.resume and args.out.exists():
+            previous = read_jsonl(args.out)
+            selected = {t["qid"]: t for t in tasks}
+            qids = [r["qid"] for r in previous]
+            if len(set(qids)) != len(qids) or not set(qids) <= selected.keys():
+                raise ValueError("Cannot resume results with duplicate or foreign QIDs")
+            if task_signature([selected[qid] for qid in qids]) != result_signature(previous):
+                raise ValueError("Cannot resume results with different task contents")
+        if args.check_only:
+            print(json.dumps({"checked": str(args.out), "inference_started": False}))
+            return
+        if args.profile:
+            _verify_graph(args)
+        _execute(args, tasks, schema)
 
-    tasks = limited_tasks(read_jsonl(args.tasks), args.limit)
+
+def _verify_graph(args) -> None:
+    from neo4j import GraphDatabase
+
+    from agent_native_graph.research.reexecute_reference import database_snapshot, expected_snapshot
+
+    expected = expected_snapshot(args.graph_file)
+    with GraphDatabase.driver(
+        args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+    ) as driver:
+        if database_snapshot(driver, "neo4j") != expected:
+            raise ValueError("Neo4j content differs from the Company graph; no inference started")
+
+
+def _execute(args, tasks: list[dict], schema: dict) -> None:
     done_qids = completed_qids(args.out) if args.resume else set()
-    if args.out.exists() and not args.resume:
-        args.out.unlink()
-    schema = json.loads(args.schema_json.read_text(encoding="utf-8"))
     llm = ChatClient(
         base_url=args.base_url,
         model=args.model,
         api_key_env=args.api_key_env,
         api_key_file=args.api_key_file,
-        enable_thinking=args.enable_thinking,
-        thinking_effort=args.thinking_effort,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
+        settings=llm_settings_for_run(args),
     )
-
-    if args.task_timeout_s and args.concurrency <= 1:
-        signal.signal(signal.SIGALRM, _raise_task_timeout)
 
     summary = {
         "total": 0,
@@ -149,7 +209,7 @@ def main() -> None:
         "auto_fetch_on_done": args.auto_fetch_on_done,
         "evaluation_fetch_all_pages": args.evaluation_fetch_all_pages,
         "enable_runner_guardrails": args.enable_runner_guardrails,
-        "task_timeout_s": args.task_timeout_s if args.concurrency <= 1 else None,
+        "task_timeout_s": args.task_timeout_s,
     }
     if args.concurrency <= 1:
         for task in pending_tasks:
@@ -194,6 +254,7 @@ def _run_agent_task(
     from agent_native_graph.backends.neo4j.backend import Neo4jGraphBackend
 
     _log(f"START {task['qid']} | {task['nl_question'][:80]}")
+    deadline = Deadline(task_timeout_s)
     backend = Neo4jGraphBackend(
         neo4j_uri,
         neo4j_user,
@@ -207,24 +268,36 @@ def _run_agent_task(
     llm_call_metrics: list[dict[str, Any]] = []
     error: str | None = None
     llm_call_count = 0
+    accounting = RequestAccounting()
     planning_required = wrapper_planning and _requires_wrapper_planning(schema, task["nl_question"])
     planning_injected = False
+
+    def call_tool(tool, args):
+        deadline.remaining()
+        result = backend.call(tool, args)
+        deadline.remaining()
+        return result
+
     try:
-        if task_timeout_s:
-            signal.alarm(task_timeout_s)
         for step_i in range(max_steps):
+            deadline.remaining()
             llm_call_count += 1
             _log(f"  LLM call {llm_call_count} (step {step_i + 1}/{max_steps})")
-            action = _next_action(
-                llm,
-                task["nl_question"],
-                transcript,
-                native_tools=native_tools,
-                tool_choice=tool_choice,
-                enable_planning_tools=enable_planning_tools,
-                schema_entry=schema_entry,
-                enable_runner_guardrails=enable_runner_guardrails,
-            )
+            with (
+                account_requests(accounting, role="agent"),
+                deadline_scope(deadline if task_timeout_s is not None else None),
+            ):
+                action = _next_action(
+                    llm,
+                    task["nl_question"],
+                    transcript,
+                    native_tools=native_tools,
+                    tool_choice=tool_choice,
+                    enable_planning_tools=enable_planning_tools,
+                    schema_entry=schema_entry,
+                    enable_runner_guardrails=enable_runner_guardrails,
+                )
+            deadline.remaining()
             llm_meta = action.pop("_llm_meta", None)
             if isinstance(llm_meta, dict):
                 llm_call_metrics.append(llm_meta)
@@ -246,16 +319,20 @@ def _run_agent_task(
                         }
                         _log(f"  -> auto tool=fetch args={{'from': '{handle}'}}")
                         try:
-                            result = backend.call("fetch", dict(fetch_action["args"]))
+                            result = call_tool("fetch", dict(fetch_action["args"]))
                             if evaluation_fetch_all_pages:
                                 result = _evaluation_fetch_all_pages(
                                     backend,
                                     fetch_action,
                                     result,
                                 )
+                            result = _benchmark_fetch_preview(result)
+                            deadline.remaining()
                             transcript.append({"action": fetch_action, "result": result})
                             _log("     auto ok matched=None")
                             break
+                        except TaskTimeoutError:
+                            raise
                         except Exception as tool_exc:
                             result = {
                                 "status": "tool_error",
@@ -273,9 +350,12 @@ def _run_agent_task(
                     continue
                 break
             try:
-                result = backend.call(str(tool), dict(action.get("args") or {}))
-                if tool == "fetch" and evaluation_fetch_all_pages:
-                    result = _evaluation_fetch_all_pages(backend, action, result)
+                result = call_tool(str(tool), dict(action.get("args") or {}))
+                if tool == "fetch":
+                    if evaluation_fetch_all_pages:
+                        result = _evaluation_fetch_all_pages(backend, action, result)
+                    result = _benchmark_fetch_preview(result)
+                deadline.remaining()
                 matched = result.get("matched_count") if isinstance(result, dict) else None
                 _log(f"     ok matched={matched}")
             except TaskTimeoutError:
@@ -302,8 +382,10 @@ def _run_agent_task(
                 }
                 _log("  -> auto tool=draft_tool_plan args={...}")
                 try:
-                    plan_result = backend.call("draft_tool_plan", dict(plan_action["args"]))
+                    plan_result = call_tool("draft_tool_plan", dict(plan_action["args"]))
                     _log("     auto ok matched=None")
+                except TaskTimeoutError:
+                    raise
                 except Exception as tool_exc:
                     _log(f"     auto error: {tool_exc.__class__.__name__}: {tool_exc}")
                     plan_result = {
@@ -325,14 +407,18 @@ def _run_agent_task(
                     }
                     _log(f"  -> auto tool=fetch args={{'from': '{handle}'}} reason=max_steps")
                     try:
-                        fetch_result = backend.call("fetch", dict(fetch_action["args"]))
+                        fetch_result = call_tool("fetch", dict(fetch_action["args"]))
                         if evaluation_fetch_all_pages:
                             fetch_result = _evaluation_fetch_all_pages(
                                 backend,
                                 fetch_action,
                                 fetch_result,
                             )
+                        fetch_result = _benchmark_fetch_preview(fetch_result)
+                        deadline.remaining()
                         _log("     auto ok matched=None")
+                    except TaskTimeoutError:
+                        raise
                     except Exception as tool_exc:
                         _log(f"     auto error: {tool_exc.__class__.__name__}: {tool_exc}")
                         fetch_result = {
@@ -345,8 +431,6 @@ def _run_agent_task(
         error = f"{exc.__class__.__name__}: {exc}"
         _log(f"  EXCEPTION: {error}")
     finally:
-        if task_timeout_s:
-            signal.alarm(0)
         backend.close()
 
     expected = normalize_answer_rows(parse_answer_json(task.get("answer_json")))
@@ -380,16 +464,13 @@ def _run_agent_task(
         "llm_call_count": llm_call_count,
         "llm_call_metrics": llm_call_metrics,
         "llm_metric_summary": llm_metric_summary,
+        "request_accounting": accounting.snapshot(),
         "tool_metric_summary": tool_metric_summary,
         "elapsed_s": elapsed,
         "error": error,
     }
     row["failure_class"] = classify_failure(row)
     return row
-
-
-def _raise_task_timeout(signum: int, frame: Any) -> None:
-    raise TaskTimeoutError("Task exceeded --task-timeout-s")
 
 
 def _log(message: str) -> None:

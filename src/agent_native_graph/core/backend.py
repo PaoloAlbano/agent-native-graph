@@ -8,8 +8,9 @@ interfaces.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Self
 
+from agent_native_graph.core.handle_store import HandleStore
 from agent_native_graph.domain.handles import Handle
 
 
@@ -17,6 +18,31 @@ class AgentGraphBackend(ABC):
     """Base class for graph engines that execute ANA tool operations."""
 
     last_fetch: list[list[Any]] | None
+    _schema_entry: str = "overview"
+
+    def __init__(self, *, handle_store: HandleStore | None = None) -> None:
+        """Use an injected workflow store, or own an independent local store."""
+        self._handle_store = handle_store if handle_store is not None else HandleStore()
+
+    def __enter__(self) -> Self:
+        """Use one backend for a workflow and release it on leaving the block."""
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        """Always close resources; never suppress a workflow exception."""
+        self.close()
+
+    def tool_specs(self, *, enable_planning_tools: bool = False) -> list[dict[str, Any]]:
+        """Return independent native LLM schemas for this workflow's discovery mode.
+
+        Catalog visibility is not permission enforcement. This requires neither
+        a database query nor a model provider.
+        """
+        from agent_native_graph.core.tool_specs import get_tool_specs
+
+        return get_tool_specs(
+            enable_planning_tools=enable_planning_tools, schema_entry=self._schema_entry
+        )
 
     @abstractmethod
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -180,4 +206,4 @@ class AgentGraphBackend(ABC):
 
     @abstractmethod
     def _fetch(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Fetch rows from a handle as final output."""
+        """Return an ana-fetch-v1 page: full rows, separate preview and consistent offsets."""
