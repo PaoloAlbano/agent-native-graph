@@ -158,8 +158,10 @@ and scripts live in [`docs/site/`](docs/site/); generated output goes to ignored
 Building needs neither Neo4j nor an LLM key. The comparison uses a local checkout
 of its pinned external Git source; see [site maintenance](docs/site/README.md).
 To enable deployment in a fork, select **Settings > Pages > Source > GitHub Actions**.
-The existing [workflow](.github/workflows/docs.yml) handles validation, build and
-publication; do not commit generated HTML/JSON or create a separate `gh-pages` branch.
+The [website workflow](.github/workflows/docs.yml) first calls the reusable
+[code checks](.github/workflows/ci.yml): lint/format, then Python and browser
+tests. Documentation build follows only if they pass; publication runs on `main`.
+Do not commit generated HTML/JSON or create a separate `gh-pages` branch.
 
 ## Experimental HTTP Service
 

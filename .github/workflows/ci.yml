@@ -1,10 +1,17 @@
-name: Code checks
+name: CI
 
 on:
-  workflow_call:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -45,3 +52,28 @@ jobs:
         run: make test
       - name: Run browser script tests
         run: node --test tests/docs_results_ui.test.cjs
+
+  documentation:
+    name: Documentation
+    needs: tests
+    uses: ./.github/workflows/docs.yml
+    with:
+      publish: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+
+  deploy:
+    name: Publish GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: documentation
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4

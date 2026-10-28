@@ -1,56 +1,20 @@
-name: CI and Research Website
+name: Documentation Build
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "docs/**"
-      - "paper/**"
-      - "examples/**"
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "Dockerfile"
-      - "Makefile"
-      - "results/**"
-      - "src/agent_native_graph/**"
-      - "tests/**"
-      - "data/reference_company100_qids.json"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/**"
-  pull_request:
-    paths:
-      - "docs/**"
-      - "paper/**"
-      - "examples/**"
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "Dockerfile"
-      - "Makefile"
-      - "results/**"
-      - "src/agent_native_graph/**"
-      - "tests/**"
-      - "data/reference_company100_qids.json"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/**"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      publish:
+        description: Upload the release artifact; only allowed on main outside pull requests.
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  code_checks:
-    name: Code Checks
-    uses: ./.github/workflows/ci.yml
-
   build:
-    name: Build Documentation
-    needs: code_checks
+    name: ${{ inputs.publish && 'Build Release Documentation' || 'Check Documentation Build' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -71,24 +35,7 @@ jobs:
       - name: Build static site
         run: uv run agent-native-graph build-docs --out build/site --reference-repo build/reference
       - uses: actions/upload-pages-artifact@v4
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: inputs.publish && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           path: build/site
 
-  deploy:
-    name: Publish GitHub Pages
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Publish
-        id: deployment
-        uses: actions/deploy-pages@v4
