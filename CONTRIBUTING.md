@@ -32,6 +32,15 @@ available as described in [site maintenance](docs/site/README.md). CI validates
 pull requests and publishes Pages only after relevant changes merge to `main`.
 Do not commit the generated `build/site/` output.
 
+GitHub Actions shows separate checks in order: **Lint and Format**, **Code Tests**,
+**Build Documentation**, then **Publish GitHub Pages** on `main` only. The reusable
+code workflow is [ci.yml](.github/workflows/ci.yml); [docs.yml](.github/workflows/docs.yml)
+orchestrates it and owns site build/deployment. A lint failure stops tests; a test
+failure stops the documentation build. Python tests use `make test`, without
+model inference or opt-in external integrations; skipped tests are not verified
+integrations. Browser syntax is checked with lint, and browser tests run with
+the code tests. The external comparison checkout is needed only by the site build.
+
 ## Add Research Results
 
 The public benchmark scope is **CypherBench Company, test, all 347 questions**.

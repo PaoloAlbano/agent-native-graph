@@ -24,8 +24,12 @@ assembles and deploys the generated artifact. No database, inference endpoint,
 or API key is needed to build. Override `DOCS_OUT` for another build directory;
 `make docs-serve` serves that same directory.
 
-The workflow `.github/workflows/docs.yml` validates pull requests and publishes
-pushes to `main`. Select **GitHub Actions** as the Pages source in repository
+The workflow `.github/workflows/docs.yml` calls the reusable code checks in
+`.github/workflows/ci.yml`: lint/format first, then Python and browser tests in
+separate named jobs. Only successful code checks allow **Build Documentation**;
+**Publish GitHub Pages** runs only on `main`, never from pull requests. The test
+job does not need the external comparison checkout or model/database secrets.
+Select **GitHub Actions** as the Pages source in repository
 settings. CI builds into `build/site/` so only generated public site artifacts
 are uploaded. Editorial Markdown files remain available through repository links.
 

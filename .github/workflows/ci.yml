@@ -1,0 +1,47 @@
+name: Code checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --locked --extra dev --extra service
+      - name: Lint Python
+        run: make lint
+      - name: Check Python formatting
+        run: uv run ruff format --check src/agent_native_graph tests examples
+      - name: Check browser script syntax
+        run: |
+          node --check docs/site/site.js
+          node --check docs/site/results.js
+          node --check docs/site/results-ui.js
+          node --check docs/site/comparison.js
+
+  tests:
+    name: Code Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --locked --extra dev --extra service
+      - name: Run Python tests
+        run: make test
+      - name: Run browser script tests
+        run: node --test tests/docs_results_ui.test.cjs

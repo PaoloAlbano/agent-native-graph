@@ -1,4 +1,4 @@
-name: Research website
+name: CI and Research Website
 
 on:
   push:
@@ -17,7 +17,7 @@ on:
       - "data/reference_company100_qids.json"
       - "pyproject.toml"
       - "uv.lock"
-      - ".github/workflows/docs.yml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "docs/**"
@@ -33,18 +33,24 @@ on:
       - "data/reference_company100_qids.json"
       - "pyproject.toml"
       - "uv.lock"
-      - ".github/workflows/docs.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: docs-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  code_checks:
+    name: Code Checks
+    uses: ./.github/workflows/ci.yml
+
   build:
+    name: Build Documentation
+    needs: code_checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -62,19 +68,6 @@ jobs:
           ref: ${{ steps.reference.outputs.commit }}
           path: build/reference
           persist-credentials: false
-      - name: Validate catalog and site generation
-        run: uv run pytest tests -q
-      - name: Check Python style
-        run: |
-          uv run ruff check src/agent_native_graph tests examples
-          uv run ruff format --check src/agent_native_graph tests examples
-      - name: Check browser script
-        run: |
-          node --check docs/site/site.js
-          node --check docs/site/results.js
-          node --check docs/site/results-ui.js
-          node --check docs/site/comparison.js
-          node --test tests/docs_results_ui.test.cjs
       - name: Build static site
         run: uv run agent-native-graph build-docs --out build/site --reference-repo build/reference
       - uses: actions/upload-pages-artifact@v4
@@ -83,6 +76,7 @@ jobs:
           path: build/site
 
   deploy:
+    name: Publish GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
