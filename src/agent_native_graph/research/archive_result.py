@@ -15,6 +15,7 @@ from agent_native_graph.application.run_config import (
     public_config,
     validate_results,
 )
+from agent_native_graph.llm_providers.accounting import summarize_ledgers
 from agent_native_graph.research_common import read_jsonl, write_jsonl
 
 
@@ -238,6 +239,7 @@ def _summary(rows: list[dict[str, Any]], run_id: str) -> dict[str, Any]:
             action = step.get("action") or {}
             if action.get("tool"):
                 tools[str(action["tool"])] += 1
+    accounting = summarize_ledgers([row.get("request_accounting") for row in rows])
     return {
         "run_id": run_id,
         "total": total,
@@ -254,6 +256,7 @@ def _summary(rows: list[dict[str, Any]], run_id: str) -> dict[str, Any]:
         "failure_classes": dict(sorted(failure_classes.items())),
         "failure_total": sum(failure_classes.values()),
         "top_tools": tools.most_common(20),
+        **({"request_accounting": accounting} if accounting is not None else {}),
     }
 
 

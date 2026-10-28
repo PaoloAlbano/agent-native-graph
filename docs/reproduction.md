@@ -26,9 +26,26 @@ This downloads CypherBench `test` and selects `graph == "company"`, currently
 347 questions, into `data/tasks_company_test.jsonl`. The task file is ignored.
 To select the published comparison subset, use the pinned QIDs, not `LIMIT=100`.
 
-The raw SimpleKG graph dump is not versioned. Place it at
-`downloads/company_simplekg.json`, then load only a **dedicated disposable**
-database:
+The raw SimpleKG graph dump is not versioned. The official
+[CypherBench dataset](https://huggingface.co/datasets/megagonlabs/cypherbench)
+provides `graphs/simplekg/company_simplekg.json`. On a fresh checkout, download
+the full graph (not the sampled variant) from this fixed upstream revision:
+
+```bash
+curl --fail --location --create-dirs \
+  --output downloads/company_simplekg.json \
+  'https://huggingface.co/datasets/megagonlabs/cypherbench/resolve/fd80c26a9f5447e4c9ba952cc70575544117306c/graphs/simplekg/company_simplekg.json'
+```
+
+Do not overwrite a local dump you need to preserve. Its expected SHA-256 for the
+current archives is
+`54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b`;
+the benchmark validates it and the loaded graph content. Task preparation above
+currently uses the upstream default revision, not this pinned graph revision;
+the runner records task hashes and the publisher rejects mismatched archived
+question sets. Do not assume a future upstream revision is the same experiment.
+
+Then load only a **dedicated disposable** database:
 
 ```bash
 make load-company
@@ -122,3 +139,135 @@ sibling `multigraphrag` checkout. Configure its `MODEL`, `TEMPERATURE`,
 347-question runs are not the published 100-QID experiment. Follow the comparison
 guide's source/QID contract, not that harness alone, when contributing a new
 published comparison.
+
+### Pinned Source And Shared Provider
+
+Opt in explicitly to the foundation adapter using a model-independent YAML
+profile and a full reference Git commit (the commit must already exist locally):
+
+```bash
+make baseline-check BASELINE_PROFILE=temp0-none REFERENCE_COMMIT=<full-40-character-sha>
+make baseline-run BASELINE_MODE=single BASELINE_PROFILE=temp0-none \
+  REFERENCE_COMMIT=<full-40-character-sha> MODEL=<model-id> BASELINE_OUT=<new-output.jsonl>
+```
+
+`baseline-check` does not read an API key or call a model. It validates task
+contents and graph dump identity, discovers the live schema, and executes a
+read-only scoring probe. It does **not** verify the entire loaded graph against
+the dump. Make installs reference dependencies through the project's `reference`
+extra; the sibling checkout supplies source and data, not its Python environment.
+The current pinned reference source requires Python 3.12 or newer. For direct
+CLI use, run `uv run --extra reference agent-native-graph baseline-run ...`.
+Committed source/configuration files are exported to a temporary directory;
+uncommitted reference code is not executed and its branch is not switched.
+Datasets are read from the original checkout. The sidecar records source-file,
+adapter, provider, input and profile hashes plus installed dependency versions;
+it records neither credentials nor endpoint URLs. A changed identity rejects
+resume, including an old sidecar without these fields.
+
+With `BASELINE_PROFILE`, every reference role uses ANA's provider, call settings,
+timeouts and HTTP retry policy; profile settings override the legacy generation
+flags. Structured generation still uses the pinned reference JSON parser
+(including its existing recovery rules). The reference workflows, including the
+prose interpreter, are unchanged. The profile path never restarts a whole question
+on HTTP 429; only the shared provider retries the request. Without a profile,
+the reference's legacy LLM client and workflow-level retries remain available
+and are identified as `reference-legacy` in metadata.
+
+Both paths now use named-database, EXPLAIN-classified read queries, explicit
+transaction timeouts, rollback and a streaming hard row cap during candidate
+execution, introspection and final scoring. Over-limit results are errors, never
+partial answers. The default cap is 100,000 rows with a profile, 10,000 without;
+the CLI allows `--max-score-rows` and `--database`. This is a research guard,
+not a replacement for database read-only credentials and procedure permissions.
+
+This is **foundation-only**, not compliance with the
+[controlled Company protocol](controlled-company-protocol.md). Shared generation
+budgets, global HTTP concurrency, common approved deadline values,
+canonical observations and retrieval-only variants still require implementation.
+No historical results are rewritten by these commands.
+
+### Request Accounting
+
+New ANA runs and profile-enabled reference baselines save `request_accounting`
+per question. This is passive instrumentation: it does not change tool/prompt
+payloads, stopping limits, sampling, HTTP retries or fallback behavior. Legacy
+baseline transport is not instrumented and records `null`; historical archives
+are not backfilled and must not be interpreted as zero consumption.
+
+The ledger distinguishes a logical provider call from each actual HTTP POST,
+including failed requests, transport retries and low-effort length fallbacks.
+`observed_completion_responses` counts returned completion responses, including
+discarded length responses; it cannot reveal generations whose response was lost.
+Reference calls are labeled by role. It records status codes, error class,
+finish reason, elapsed time and numeric token usage, but no API keys, endpoint
+URLs, prompts, responses or exception messages. Those question/response traces
+remain in their existing benchmark artifacts, not in the accounting ledger.
+
+Use `request_accounting.summary.observed_usage_totals` for observed request-level
+usage, including discarded initial responses before a fallback. The older
+`llm_metric_summary` / `llm_*tokens` fields retain their historical semantics
+(returned-response usage) for compatibility; do not add those totals together.
+`attempts_without_usage` and `usage_field_coverage` distinguish unavailable token
+counts from actual reported zero. No token estimate or model-price estimate is
+invented for failed requests whose usage is unavailable.
+
+Question rows retain request observations even when the provider raises before
+returning `__chat_meta`. Archive summaries aggregate only instrumented ledgers
+and report coverage of legacy/uninstrumented rows. Latency sums are service
+time across calls, not batch wall time, because roles/questions can overlap.
+
+Profile-enabled reference roles now await `provider.achat()` directly, not a
+synchronous client in `asyncio.to_thread`. Cancellation closes the async client;
+the question waits for active sibling requests to settle before saving its
+ledger. The harness also records cancelled in-flight questions before closing
+the output file. `requests_settled` describes client requests, not confirmed
+remote-server cancellation or complete billing information.
+Batch helpers also cancel and drain work still queued at their semaphore;
+successful batch ordering and concurrency limits remain unchanged.
+
+Custom callers that still put synchronous `provider.chat()` in a thread cannot
+cancel that thread by cancelling its await. Such snapshots retain pending flags
+and remain incomplete. Use `await provider.achat()` in asynchronous applications.
+Durable recovery after process crashes or forced termination remains future work.
+
+No full benchmark rerun is needed to preserve historical quality results.
+Unit/integration tests check payload equality, failure and retry accounting,
+per-question isolation and the real pinned workflows with simulated responses.
+Only small inference smoke tests are needed for gateway compatibility. New
+metrics become available for future runs; old missing metrics stay unknown.
+
+### Timeouts And Cancellation
+
+The YAML `timeout_s` remains the HTTP client's per-operation timeout. It is
+distinct from the total elapsed-time allowance for a question, which includes
+retry waits and length fallbacks. Neither sampling nor retry decisions change
+when requests complete within their existing limits.
+
+ANA's diagnostic `--task-timeout-s N` now works at concurrency above one without
+process-global signals. A worker with an explicit deadline uses cancellable
+async HTTP internally, then closes it before returning its result. The default
+is still no task deadline, and standard Company profiles still reject custom
+task-timeout overrides. A task timeout is classified as `task_timeout`, distinct
+from a backend query timeout. Requested deadlines are saved even with concurrency.
+
+Profile-enabled reference runs retain `--task-timeout` (default 240 seconds),
+but apply it once to the question, including final query scoring, rather than
+giving scoring extra time. One monotonic deadline is inherited by every role;
+retry waits and active requests are interruptible. The legacy unprofiled path
+retains its separate per-generation-attempt timeout behavior and is labeled
+`reference-legacy`; it is not certified by the new request-lifecycle tests.
+
+ANA's graph tools are still synchronous: deadline checks occur before/after
+each tool, including final pagination. An already-running synchronous Neo4j
+query is not forcibly killed by the question deadline; it retains its separate
+query timeout (normally 30 seconds), so cleanup can overrun the question limit.
+This is not a hard real-time execution guarantee or a common 900-second study
+policy. Shared approved values and global endpoint admission remain pending.
+
+Closing an HTTP connection stops client work and prevents subsequent retries;
+it cannot guarantee that a remote gateway stops model computation. That needs
+provider-supported abort semantics. Tests use mock transports and a real local
+TCP server to verify socket closure, no leaked sibling requests, settled ledgers,
+and unchanged sync/async payloads across all four profiles. No full inference
+rerun is required for these lifecycle checks.

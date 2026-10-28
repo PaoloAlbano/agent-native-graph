@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_native_graph.llm_providers.accounting import RequestAccounting
 from agent_native_graph.research.archive_reference_baseline import DEFAULT_ARCHIVE_ROOT, archive
 from agent_native_graph.research.compare_company_results import _output_paths, compare
 
@@ -89,6 +90,21 @@ def test_archive_rejects_incomplete_reference_run(tmp_path: Path) -> None:
     run.write_text(lines[0] + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Incomplete run"):
         archive(run, tmp_path / "results", tasks, graph)
+
+
+def test_reference_archive_keeps_accounting_coverage_distinct_from_legacy_rows(tmp_path):
+    run, tasks, graph = _fixture(tmp_path)
+    rows = [json.loads(line) for line in run.read_text().splitlines()]
+    ledger = RequestAccounting()
+    call = ledger.start_call("test/model")
+    ledger.update(call, status="ok", elapsed_s=0.1)
+    rows[0]["request_accounting"] = ledger.snapshot()
+    _write_jsonl(run, rows)
+    destination = archive(run, tmp_path / "archive", tasks, graph)
+    summary = json.loads((destination / "summary.json").read_text())
+    assert summary["request_accounting"]["instrumented_items"] == 1
+    assert summary["request_accounting"]["uninstrumented_items"] == 1
+    assert summary["correct"] == 1
 
 
 def test_comparison_paths_keep_dots_in_model_name(tmp_path: Path) -> None:

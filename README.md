@@ -57,6 +57,12 @@ merge to `main`; branch-local work is not automatically the published version.
 
 ## Contribute a Benchmark Run
 
+For code contributions and the distinction between new results, benchmark
+inputs and your own graph, see [CONTRIBUTING.md](CONTRIBUTING.md).
+The public Python API starts with `connect_neo4j(...)`, `call(...)` and
+`tool_specs()`, with context-manager cleanup. For graph access without benchmarks or an LLM key, see
+[Use ANA on Your Own Neo4j](docs/library-and-server.md), covering Python and Docker/HTTP.
+
 Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), a Neo4j database
 prepared with Company data, and an OpenAI-compatible model endpoint/API key.
 
@@ -157,12 +163,16 @@ publication; do not commit generated HTML/JSON or create a separate `gh-pages` b
 
 ## Experimental HTTP Service
 
-The service exposes graph operations without embedding an LLM. It is a prototype:
-**there is no authentication or multi-client handle isolation guarantee**, and
-the backend/handle state is currently process-global. Do not expose it directly
-to untrusted networks or describe it as production-ready.
+The demo service exposes graph operations without embedding an LLM. Static
+bearer API keys identify clients and bind sessions to their owners. Server-owned
+`readonly`/`readwrite` grants filter the catalog and authorize execution; current
+tools are all read-only. This is not graph-level tenant isolation or production
+identity management. Keep it local or behind a trusted TLS proxy.
 
-With Neo4j connection variables configured, start a loopback-only instance:
+Configure Neo4j connection variables and `ANA_AUTH_FILE`, a private client JSON
+file outside version control, then start a loopback-only instance. Without
+client configuration, data/catalog endpoints return 503 rather than allow
+anonymous access. See the [setup and credential example](docs/library-and-server.md#demo-authentication).
 
 ```bash
 uv run uvicorn agent_native_graph.interfaces.service:app --host 127.0.0.1 --port 8080
@@ -171,13 +181,30 @@ uv run uvicorn agent_native_graph.interfaces.service:app --host 127.0.0.1 --port
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /health` | Process liveness only; does not verify Neo4j readiness |
-| `GET /tools` | Public tool-contract metadata, optionally filtered by design status |
-| `POST /tools/call` | Execute an operation, e.g. `{"tool":"schema_overview","args":{}}` |
+| `GET /tools` | Authorized tool-contract metadata, optionally filtered by design status |
+| `GET /tools/specs` | Complete native LLM schemas, including effective parameters and descriptions |
+| `POST /sessions` | Create an isolated workflow and obtain its session token |
+| `POST /tools/call` | Execute an operation with the `X-ANA-Session` header |
+| `DELETE /sessions/current` | Close the workflow using the same header |
 
-Schema is discovered from Neo4j when the backend is first needed by a tool call,
-not during `/health`. `ANA_SCHEMA_JSON` is an optional explicit schema override;
+All endpoints except `/health` require `Authorization: Bearer <client-key>`
+(the framework's `/docs` and `/openapi.json` remain public API documentation).
+Session calls also require `X-ANA-Session`; knowing a session token alone is
+not sufficient. Run the bounded, paginated example with no model API key:
+
+```bash
+export ANA_API_KEY_FILE="$PWD/.local-secrets/demo.key"
+make demo-client
+```
+
+Schema is discovered when a session is created, not during `/health`.
+`NEO4J_DATABASE` selects the database for discovery and queries;
+`ANA_SCHEMA_JSON` is an optional explicit schema override;
 no Company-specific JSON is required for ordinary service discovery.
 `ANA_NEO4J_QUERY_TIMEOUT_S` defaults to 30 seconds.
+The app owns and closes its backends. Session idle timeout and capacity are
+configurable; see the [session protocol and migration](docs/library-and-server.md#http-server).
+Use one worker: session state is process-local, not a shared multi-worker store.
 
 A [Dockerfile](Dockerfile) is provided for this experimental service, not for
 loading datasets or running benchmarks automatically. For a Docker Desktop
@@ -186,12 +213,17 @@ local example, configure the URI to reach Neo4j from inside the container:
 ```bash
 make docker-build
 docker run --rm -p 127.0.0.1:8080:8080 \
+  --mount "type=bind,src=$ANA_AUTH_FILE,dst=/run/secrets/ana-auth.json,readonly" \
+  -e ANA_AUTH_FILE=/run/secrets/ana-auth.json \
   -e NEO4J_URI=bolt://host.docker.internal:7687 \
-  -e NEO4J_USER -e NEO4J_PASSWORD agent-native-graph
+  -e NEO4J_USER -e NEO4J_PASSWORD -e NEO4J_DATABASE agent-native-graph
 ```
 
-Adjust the URI for your container network. The `make serve` / `make docker-run`
-shortcuts bind more broadly; use the loopback examples above for local-only access.
+The image runs as UID/GID 10001, sets no database credentials in Docker ENV and
+checks process liveness with a Docker healthcheck. The mounted client file must
+be readable by that UID. Adjust the URI for your container network.
+`make docker-run` also binds loopback; `make serve` listens on all container/host
+interfaces, so use the uvicorn command above for local-only non-Docker access.
 
 ## Code and Tool Contracts
 

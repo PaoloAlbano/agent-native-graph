@@ -117,6 +117,8 @@ def classify_failure(row: dict[str, Any]) -> str | None:
         if isinstance(result, dict) and result.get("status") == "tool_error":
             tool_errors.append(str(result.get("error") or ""))
     combined = "\n".join([error, *tool_errors]).lower()
+    if "tasktimeouterror" in combined:
+        return "task_timeout"
     if "jsondecodeerror" in combined:
         return "json_decode"
     if "transactiontimedout" in combined or "timeout" in combined:

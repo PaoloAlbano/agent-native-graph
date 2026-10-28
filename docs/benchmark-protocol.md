@@ -3,6 +3,11 @@
 This document defines the current reproducible benchmark protocol for the
 Agent-Native Graph research prototype.
 
+This document describes the current reproducible treatment. A separate
+[prospective matched-condition design](controlled-company-protocol.md) audits
+what must change before a new controlled comparison; it is not implemented or
+an instruction to reinterpret the historical runs.
+
 For new full ANA runs, use [Contribute a Company Run](run-standard.md): launch
 with `make benchmark`, then archive the printed output with
 `make archive-result OUT=...`. Checks and metadata capture are automatic.

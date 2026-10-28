@@ -1,5 +1,6 @@
 """Native LLM tool specifications for ANA graph tools."""
 
+from copy import deepcopy
 from typing import Any
 
 from agent_native_graph.core.prompts import (
@@ -69,6 +70,24 @@ SCHEMA_ENTRY_MODES = (
     "overview_expand_first",
     "overview_light_expand_first",
 )
+
+
+def get_tool_specs(
+    *, enable_planning_tools: bool = False, schema_entry: str = "overview"
+) -> list[dict[str, Any]]:
+    """Return complete native tool schemas without database/model access.
+
+    Includes the effective compatibility rules used by the research runner.
+    Each result is an independent copy safe for caller customization. The
+    catalog describes visibility, not authorization to execute an operation.
+    """
+    if type(enable_planning_tools) is not bool:
+        raise ValueError("enable_planning_tools must be a boolean")
+    if schema_entry not in SCHEMA_ENTRY_MODES:
+        raise ValueError(f"Unknown schema entry mode: {schema_entry}")
+    return deepcopy(
+        _tool_specs(enable_planning_tools=enable_planning_tools, schema_entry=schema_entry)
+    )
 
 
 def _tool_specs(

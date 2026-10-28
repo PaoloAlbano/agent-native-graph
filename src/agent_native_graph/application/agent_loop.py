@@ -208,6 +208,15 @@ def _latest_result_has_finalization_hint(transcript: list[dict[str, Any]]) -> bo
     return False
 
 
+def _benchmark_fetch_preview(result: dict[str, Any]) -> dict[str, Any]:
+    """Preserve the research transcript's historical fetch shape, not the public page API."""
+    preview = dict(result)
+    preview["rows"] = result["rows"][:20]
+    for field in ("contract_version", "preview", "preview_truncated"):
+        preview.pop(field, None)
+    return preview
+
+
 def _evaluation_fetch_all_pages(
     backend: Any,
     action: dict[str, Any],

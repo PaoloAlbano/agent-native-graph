@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "paper/**"
+      - "examples/**"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "Dockerfile"
+      - "Makefile"
       - "results/**"
       - "src/agent_native_graph/**"
       - "tests/**"
@@ -15,6 +21,12 @@ on:
   pull_request:
     paths:
       - "docs/**"
+      - "paper/**"
+      - "examples/**"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "Dockerfile"
+      - "Makefile"
       - "results/**"
       - "src/agent_native_graph/**"
       - "tests/**"
@@ -54,8 +66,8 @@ jobs:
         run: uv run pytest tests -q
       - name: Check Python style
         run: |
-          uv run ruff check src/agent_native_graph tests
-          uv run ruff format --check src/agent_native_graph tests
+          uv run ruff check src/agent_native_graph tests examples
+          uv run ruff format --check src/agent_native_graph tests examples
       - name: Check browser script
         run: |
           node --check docs/site/site.js

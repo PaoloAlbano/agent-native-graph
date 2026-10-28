@@ -32,6 +32,7 @@ data/*.txt
 
 # Private planning and collaboration notes; not part of the published project.
 .local-notes/
+.local-secrets/
 
 # Local benchmark metadata; only the sanitized run-config.json is published.
 *.config.json

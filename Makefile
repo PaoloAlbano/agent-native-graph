@@ -3,6 +3,7 @@
 NEO4J_URI ?= bolt://127.0.0.1:7687
 NEO4J_USER ?= neo4j
 NEO4J_PASSWORD ?= password
+NEO4J_DATABASE ?=
 BASE_URL ?= https://openrouter.ai/api/
 MODEL ?= openai/gpt-oss-120b
 API_KEY_FILE ?= /tmp/grapharrow-agent-key
@@ -29,9 +30,11 @@ BATCH_SIZE ?= 2000
 DOCKER_IMAGE ?= agent-native-graph
 REFERENCE_REPO ?= ../multigraphrag
 REEXECUTION_OUT ?= $(RUN_DIR)/query-reexecution
-REFERENCE_PYTHON ?= $(REFERENCE_REPO)/.venv/bin/python
+REFERENCE_PYTHON ?= uv run --extra reference python
 BASELINE_MODE ?= direct
-BASELINE_OUT ?= $(RUN_DIR)/baseline_$(BASELINE_MODE)_$(subst /,_,$(MODEL))_temp$(TEMPERATURE)_reasoning_$(REASONING)_n$(FULL_LIMIT).jsonl
+BASELINE_PROFILE ?=
+REFERENCE_COMMIT ?=
+BASELINE_OUT ?= $(RUN_DIR)/baseline_$(BASELINE_MODE)_$(subst /,_,$(MODEL))_$(if $(BASELINE_PROFILE),$(BASELINE_PROFILE),temp$(TEMPERATURE)_reasoning_$(REASONING))_n$(FULL_LIMIT).jsonl
 COMPARISON_OUT ?= $(RUN_DIR)/comparison/cypherbench-company.md
 DOCS_PORT ?= 8000
 DOCS_OUT ?= build/site
@@ -65,6 +68,7 @@ help:
 	@echo "  make docs-build       Generate the research website and tool reference"
 	@echo "  make docs-serve       Build and preview the website on localhost:$(DOCS_PORT)"
 	@echo "  make serve            Run the experimental HTTP service"
+	@echo "  make demo-client      Run the bounded HTTP workflow example (ANA_API_KEY_FILE)"
 	@echo "  make serve-mcp        Run the experimental MCP service"
 	@echo "  make docker-build     Build service image"
 	@echo "  make docker-run       Run service image"
@@ -86,10 +90,10 @@ install-mcp:
 	@uv sync --locked --extra dev --extra service --extra mcp
 
 format:
-	@uv run ruff format src/agent_native_graph tests
+	@uv run ruff format src/agent_native_graph tests examples
 
 lint:
-	@uv run ruff check src/agent_native_graph tests
+	@uv run ruff check src/agent_native_graph tests examples
 
 test:
 	@uv run pytest tests -q
@@ -159,7 +163,11 @@ archive-result:
 baseline-check:
 	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
 	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
-	  --out "$(BASELINE_OUT)" --check-only
+	  --out "$(BASELINE_OUT)" --check-only \
+	  --neo4j-uri "$(NEO4J_URI)" --neo4j-user "$(NEO4J_USER)" \
+	  --neo4j-password "$(NEO4J_PASSWORD)" --database "$(or $(NEO4J_DATABASE),neo4j)" \
+	  $(if $(BASELINE_PROFILE),--profile "$(BASELINE_PROFILE)",) \
+	  $(if $(REFERENCE_COMMIT),--reference-commit "$(REFERENCE_COMMIT)",)
 
 baseline-run:
 	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
@@ -167,9 +175,12 @@ baseline-run:
 	  --out "$(BASELINE_OUT)" --model "$(MODEL)" --base-url "$(BASE_URL)" \
 	  --api-key-file "$(API_KEY_FILE)" --neo4j-uri "$(NEO4J_URI)" \
 	  --neo4j-user "$(NEO4J_USER)" --neo4j-password "$(NEO4J_PASSWORD)" \
+	  --database "$(or $(NEO4J_DATABASE),neo4j)" \
 	  --temperature "$(TEMPERATURE)" --reasoning "$(REASONING)" \
 	  --max-tokens "$(MAX_TOKENS)" --concurrency "$(CONCURRENCY)" \
-	  --limit "$(FULL_LIMIT)" $(if $(filter 1,$(RESUME)),--resume,)
+	  --limit "$(FULL_LIMIT)" $(if $(filter 1,$(RESUME)),--resume,) \
+	  $(if $(BASELINE_PROFILE),--profile "$(BASELINE_PROFILE)",) \
+	  $(if $(REFERENCE_COMMIT),--reference-commit "$(REFERENCE_COMMIT)",)
 
 baseline-archive:
 	@uv run agent-native-graph baseline-archive --run "$(BASELINE_OUT)"
@@ -204,7 +215,12 @@ serve:
 	@NEO4J_URI="$(NEO4J_URI)" \
 	NEO4J_USER="$(NEO4J_USER)" \
 	NEO4J_PASSWORD="$(NEO4J_PASSWORD)" \
+	NEO4J_DATABASE="$(NEO4J_DATABASE)" \
 	uv run agent-native-graph serve
+
+.PHONY: demo-client
+demo-client:
+	@uv run python examples/http_workflow.py
 
 serve-mcp:
 	@uv run agent-native-graph serve-mcp
@@ -213,10 +229,14 @@ docker-build:
 	@docker build -t "$(DOCKER_IMAGE)" .
 
 docker-run:
-	@docker run --rm -p 8080:8080 \
+	@test -n "$$ANA_AUTH_FILE" || (echo "Set ANA_AUTH_FILE to your private client config path"; exit 1)
+	@docker run --rm -p 127.0.0.1:8080:8080 \
+	  --mount "type=bind,src=$$ANA_AUTH_FILE,dst=/run/secrets/ana-auth.json,readonly" \
+	  -e ANA_AUTH_FILE=/run/secrets/ana-auth.json \
 	  -e NEO4J_URI=bolt://host.docker.internal:7687 \
 	  -e NEO4J_USER="$(NEO4J_USER)" \
 	  -e NEO4J_PASSWORD="$(NEO4J_PASSWORD)" \
+	  -e NEO4J_DATABASE="$(NEO4J_DATABASE)" \
 	  "$(DOCKER_IMAGE)"
 
 clean:

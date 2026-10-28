@@ -15,6 +15,14 @@ from agent_native_graph.research.docs_results import read_runs
 SHIPPED_PROFILE_DIR = run_config.PROFILE_DIR
 
 
+def test_requested_task_timeout_is_saved_with_concurrency_above_one(experiment):
+    root, args, tasks = experiment
+    args.profile = None
+    args.task_timeout_s = 15
+    config = run_config.save_config(args, tasks, root)
+    assert config["task_timeout_s"] == 15 and config["concurrency"] == 3
+
+
 @pytest.fixture
 def experiment(tmp_path, monkeypatch):
     profiles = tmp_path / "profiles"

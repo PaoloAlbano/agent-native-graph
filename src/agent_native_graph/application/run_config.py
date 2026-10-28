@@ -259,7 +259,7 @@ def save_config(args, tasks: list[dict], root: Path) -> dict:
                 "enable_runner_guardrails",
             )
         },
-        "task_timeout_s": args.task_timeout_s if args.concurrency <= 1 else None,
+        "task_timeout_s": args.task_timeout_s,
         "inputs": inputs,
         "task_signature_sha256": task_signature(tasks),
         "git_commit": commit,

@@ -8,19 +8,36 @@ can be scored with the same exact answer_json comparator used by ANA.
 import argparse
 import asyncio
 import hashlib
+import importlib.metadata
 import json
 import logging
+import math
 import os
-import subprocess
-import sys
 import time
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
+from agent_native_graph.application.run_config import (
+    execution_identity,
+    load_profile,
+    profile_names,
+)
+from agent_native_graph.llm_providers.accounting import RequestAccounting, account_requests
+from agent_native_graph.llm_providers.execution import (
+    Deadline,
+    deadline_scope,
+    gather_and_settle,
+    question_requests,
+)
+from agent_native_graph.llm_providers.openai_compatible import OpenAICompatibleProvider
+from agent_native_graph.llm_providers.settings import LLMCallSettings
+from agent_native_graph.research.read_only import execute_read_only_async
+from agent_native_graph.research.reference_adapters import build_profile_runner, guarded_graph_class
+from agent_native_graph.research.reference_source import reference_source
 from agent_native_graph.research_common import (
     normalize_answer_rows,
-    normalize_result_rows,
     parse_answer_json,
     read_jsonl,
     result_matches_answer,
@@ -38,6 +55,14 @@ def _sha256(path: Path) -> str:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference-repo", type=Path, default=Path("../multigraphrag"))
+    parser.add_argument(
+        "--reference-commit", help="Full Git SHA; export committed source, not the checkout"
+    )
+    parser.add_argument(
+        "--profile",
+        choices=profile_names(),
+        help="Shared ANA YAML call profile; requires --reference-commit",
+    )
     parser.add_argument("--tasks", type=Path, default=Path("data/tasks_company_test.jsonl"))
     parser.add_argument("--graph", type=Path, default=Path("downloads/company_simplekg.json"))
     parser.add_argument("--out", type=Path, required=True)
@@ -48,6 +73,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-uri", default="bolt://127.0.0.1:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default="password")
+    parser.add_argument("--database", default="neo4j")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--reasoning", choices=("none", "medium"), default="none")
     parser.add_argument("--max-tokens", type=int, default=16000)
@@ -55,7 +81,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=347)
     parser.add_argument("--query-timeout", type=float, default=30.0)
     parser.add_argument("--task-timeout", type=float, default=240.0)
-    parser.add_argument("--max-score-rows", type=int, default=10000)
+    parser.add_argument("--max-score-rows", type=int)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     return parser.parse_args()
@@ -88,30 +114,94 @@ async def _complete_schema(graph_client):
 
 
 async def _score_cypher(graph_client, cypher: str | None, expected: list[list], args):
-    import neo4j
-
     if not cypher:
         return False, [], "no_cypher"
+    result = await execute_read_only_async(
+        graph_client._driver, args.database, cypher, args.query_timeout, args.max_score_rows
+    )
+    rows = result["rows"]
+    return result["ok"] and result_matches_answer(rows, expected), rows, result["error"]
+
+
+async def _generate_answer(runner, task, schema_text, mode):
+    if mode == "direct":
+        generation = await runner.generate(question=task["nl_question"], schema_text=schema_text)
+        return SimpleNamespace(cypher=generation.cypher, answer=None, accepted=None, iterations=1)
+    if mode == "agentic":
+        return await runner.ask(task["nl_question"], schema_text=schema_text)
+    return await runner.ask(task["nl_question"], schema_text)
+
+
+async def _execute_question(task, runner, graph_client, schema_text, expected, args, accounting):
+    """Close every owned async request before taking the terminal question snapshot."""
+    from multigraphrag.llm.call_log import set_call_context
+
+    result, error = None, None
+    deadline = Deadline(args.task_timeout) if args.profile else None
     try:
-        async with graph_client._driver.session(
-            database=graph_client._settings.database, default_access_mode=neo4j.READ_ACCESS
-        ) as session:
-            result = await session.run(neo4j.Query(cypher, timeout=args.query_timeout))
-            keys = list(result.keys())
-            records = []
-            async for record in result:
-                if len(records) >= args.max_score_rows:
-                    return False, [], "score_row_limit"
-                records.append({key: record.get(key) for key in keys})
-        rows = normalize_result_rows(records)
-        return result_matches_answer(rows, expected), rows, None
-    except Exception as exc:  # A generated query can fail independently of the agent run.
-        return False, [], f"score_query_error: {type(exc).__name__}: {exc}"
+        with (
+            account_requests(accounting),
+            set_call_context(qid=task["qid"], domain="company", mode=args.mode),
+            deadline_scope(deadline),
+        ):
+            async with (
+                question_requests(),
+                asyncio.timeout(args.task_timeout if args.profile else None),
+            ):
+                for attempt in range(1, 9):
+                    try:
+                        generation = _generate_answer(runner, task, schema_text, args.mode)
+                        result = (
+                            await generation
+                            if args.profile
+                            else await asyncio.wait_for(generation, timeout=args.task_timeout)
+                        )
+                        error = None
+                        break
+                    except Exception as exc:
+                        error = f"{type(exc).__name__}: {exc}"
+                        if not args.profile and "429" in error and attempt < 8:
+                            await asyncio.sleep(30)
+                            continue
+                        break
+                if result is not None:
+                    if deadline is not None:
+                        deadline.remaining()
+                    matches, rows, score_error = await _score_cypher(
+                        graph_client, result.cypher, expected, args
+                    )
+                    if deadline is not None:
+                        deadline.remaining()
+                    return result, matches, rows, error or score_error
+                return None, False, [], error or "no_result"
+    except Exception as exc:
+        return result, False, [], f"{type(exc).__name__}: {exc}"
 
 
 async def _run(args: argparse.Namespace) -> None:
+    if args.profile and not args.reference_commit:
+        raise ValueError("--profile requires --reference-commit")
+    if not args.database.strip():
+        raise ValueError("--database must not be blank")
+    if args.max_score_rows is None:
+        args.max_score_rows = 100000 if args.profile else 10000
+    for name in (
+        "concurrency",
+        "limit",
+        "max_tokens",
+        "query_timeout",
+        "task_timeout",
+        "max_score_rows",
+    ):
+        value = getattr(args, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"{name} must be positive and finite")
+    with reference_source(args.reference_repo.resolve(), args.reference_commit) as provenance:
+        await _run_with_reference(args, provenance)
+
+
+async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> None:
     reference_repo = args.reference_repo.resolve()
-    sys.path.insert(0, str(reference_repo / "src"))
 
     from multigraphrag.agents.query_generator import QueryGeneratorAgent
     from multigraphrag.composition import build_pipeline, build_single_pass_runner
@@ -124,9 +214,15 @@ async def _run(args: argparse.Namespace) -> None:
         WorkflowSettings,
     )
     from multigraphrag.evaluation.cypherbench import load_tasks
-    from multigraphrag.graph.memgraph_client import MemgraphClient
-    from multigraphrag.llm.call_log import CallLogger, _call_context, set_call_context
+    from multigraphrag.llm.call_log import CallLogger, _call_context
     from multigraphrag.llm.factory import build_llm_client
+
+    MemgraphClient = guarded_graph_class(timeout=args.query_timeout, max_rows=args.max_score_rows)
+    profile_settings, profile_hash = load_profile(args.profile) if args.profile else (None, None)
+    if profile_settings:
+        args.temperature = profile_settings["temperature"]
+        args.max_tokens = profile_settings["max_tokens"]
+        args.reasoning = "medium" if profile_settings["enable_thinking"] else "none"
 
     class CountingCallLogger(CallLogger):
         def __init__(self, path: Path) -> None:
@@ -149,19 +245,38 @@ async def _run(args: argparse.Namespace) -> None:
     qids = [task["qid"] for task in tasks]
     if qids != [task.qid for task in reference_tasks] or len(set(qids)) != len(qids):
         raise ValueError("ANA and reference Company task qids differ")
+    validate_task_contents(tasks, reference_tasks)
     reference_graph = reference_repo / "data/cypherbench/graphs/simplekg/company_simplekg.json"
     if _sha256(args.graph) != _sha256(reference_graph):
         raise ValueError("ANA and reference graph dumps differ")
 
-    source_commit = subprocess.check_output(
-        ["git", "-C", str(reference_repo), "rev-parse", "HEAD"], text=True
-    ).strip()
-    source_repo = subprocess.check_output(
-        ["git", "-C", str(reference_repo), "remote", "get-url", "origin"], text=True
-    ).strip()
     metadata = {
-        "source_repo": source_repo,
-        "source_commit": source_commit,
+        **provenance,
+        "source_repo": "multigraphrag",
+        "execution_policy": "read-only-v1",
+        "protocol_status": "foundation-only-not-controlled-protocol-compliant",
+        "transport": "ana-shared-provider" if args.profile else "reference-legacy",
+        "request_accounting_version": 1 if args.profile else None,
+        "request_lifecycle": "async-cancellable-v1" if args.profile else "reference-legacy",
+        "profile": args.profile,
+        "profile_sha256": profile_hash,
+        "llm_settings": profile_settings,
+        "database": args.database,
+        "query_timeout_s": args.query_timeout,
+        "task_timeout_s": args.task_timeout,
+        "adapter_sha256": _sha256(Path(__file__).with_name("reference_adapters.py")),
+        "read_policy_sha256": _sha256(Path(__file__).with_name("read_only.py")),
+        "provider_sha256": _sha256(
+            Path(__file__).parents[1] / "llm_providers/openai_compatible.py"
+        ),
+        "harness_sha256": _sha256(Path(__file__)),
+        "ana_execution": execution_identity(
+            SimpleNamespace(native_tools=False), Path(__file__).resolve().parents[3]
+        ),
+        "runtime_versions": {
+            name: importlib.metadata.version(name)
+            for name in ("httpx", "neo4j", "pydantic", "pydantic-settings", "tenacity", "PyYAML")
+        },
         "approach": f"multigraphrag_{args.mode}",
         "mode": args.mode,
         "benchmark": "cypherbench-company",
@@ -188,6 +303,7 @@ async def _run(args: argparse.Namespace) -> None:
                 uri=args.neo4j_uri,
                 username=args.neo4j_user,
                 password=args.neo4j_password,
+                database=args.database,
             ),
         )
         async with MemgraphClient(settings.memgraph) as graph_client:
@@ -237,6 +353,7 @@ async def _run(args: argparse.Namespace) -> None:
             uri=args.neo4j_uri,
             username=args.neo4j_user,
             password=args.neo4j_password,
+            database=args.database,
         ),
         workflow=WorkflowSettings(),
         evaluation=EvaluationSettings(),
@@ -244,6 +361,8 @@ async def _run(args: argparse.Namespace) -> None:
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     metadata_path = args.out.with_suffix(".meta.json")
+    if args.resume and args.out.exists() and not metadata_path.exists():
+        raise ValueError("Cannot resume: output has no provenance sidecar")
     if args.resume and metadata_path.exists():
         old_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         for key, value in metadata.items():
@@ -257,7 +376,7 @@ async def _run(args: argparse.Namespace) -> None:
     if args.out.exists() and not args.resume:
         raise FileExistsError(f"Output already exists: {args.out}")
 
-    calls_path = args.out.with_name(f"{args.out.stem}.calls.{int(time.time())}.jsonl")
+    calls_path = args.out.with_name(f"{args.out.stem}.calls.{uuid4().hex}.jsonl")
     metadata["call_logs"].append(str(calls_path))
     metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     logger = CountingCallLogger(calls_path)
@@ -275,51 +394,21 @@ async def _run(args: argparse.Namespace) -> None:
                     return
                 async with semaphore:
                     started = time.perf_counter()
-                    result = None
-                    error = None
-                    for attempt in range(1, 9):
-                        try:
-                            with set_call_context(
-                                qid=task["qid"], domain="company", mode=args.mode
-                            ):
-                                if args.mode == "direct":
-                                    generation = await asyncio.wait_for(
-                                        runner.generate(
-                                            question=task["nl_question"], schema_text=schema_text
-                                        ),
-                                        timeout=args.task_timeout,
-                                    )
-                                    result = SimpleNamespace(
-                                        cypher=generation.cypher,
-                                        answer=None,
-                                        accepted=None,
-                                        iterations=1,
-                                    )
-                                elif args.mode == "agentic":
-                                    result = await asyncio.wait_for(
-                                        runner.ask(task["nl_question"], schema_text=schema_text),
-                                        timeout=args.task_timeout,
-                                    )
-                                else:
-                                    result = await asyncio.wait_for(
-                                        runner.ask(task["nl_question"], schema_text),
-                                        timeout=args.task_timeout,
-                                    )
-                            error = None
-                            break
-                        except Exception as exc:
-                            error = f"{type(exc).__name__}: {exc}"
-                            if "429" in error and attempt < 8:
-                                await asyncio.sleep(30)
-                                continue
-                            break
+                    accounting = RequestAccounting()
                     expected = normalize_answer_rows(parse_answer_json(task["answer_json"]))
-                    if result is not None:
-                        matches, rows, score_error = await _score_cypher(
-                            graph_client, result.cypher, expected, args
+                    cancelled = None
+                    try:
+                        result, matches, rows, error = await _execute_question(
+                            task, runner, graph_client, schema_text, expected, args, accounting
                         )
-                    else:
-                        matches, rows, score_error = False, [], "no_result"
+                    except asyncio.CancelledError as exc:
+                        cancelled = exc
+                        result, matches, rows, error = (
+                            None,
+                            False,
+                            [],
+                            "CancelledError: Question cancelled",
+                        )
                     row = {
                         "approach": f"multigraphrag_{args.mode}",
                         "qid": task["qid"],
@@ -331,28 +420,44 @@ async def _run(args: argparse.Namespace) -> None:
                         "accepted": result.accepted if result else False,
                         "iterations": result.iterations if result else 0,
                         "rows": rows,
-                        "ok": result is not None and score_error is None,
+                        "ok": result is not None and error is None,
                         "matches_answer_json": matches,
                         "llm_call_count": logger.counts[task["qid"]],
+                        "request_accounting": accounting.snapshot() if args.profile else None,
                         "tool_call_count": 0,
-                        "error": error or score_error,
+                        "error": error,
                         "elapsed_s": time.perf_counter() - started,
                     }
                     output.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
                     output.flush()
                     completed.add(task["qid"])
                     print(f"{args.mode}: {len(completed)}/{len(tasks)}", flush=True)
+                    if cancelled is not None:
+                        raise cancelled
 
-            if args.mode == "agentic":
+            async def run_all(runner):
+                await gather_and_settle(run_one(task, runner) for task in tasks)
+
+            if args.profile:
+                provider = OpenAICompatibleProvider(
+                    base_url=args.base_url,
+                    model=args.model,
+                    api_key_env="API_KEY",
+                    api_key_file=args.api_key_file,
+                    settings=LLMCallSettings(**profile_settings),
+                )
+                runner = build_profile_runner(args.mode, settings, graph_client, provider, logger)
+                await run_all(runner)
+            elif args.mode == "agentic":
                 async with build_pipeline(settings, graph_client, call_logger=logger) as runner:
-                    await asyncio.gather(*(run_one(task, runner) for task in tasks))
+                    await run_all(runner)
             elif args.mode == "direct":
                 client = build_llm_client(
                     settings.llm, agent_name="query_generator", call_logger=logger
                 )
                 try:
                     runner = QueryGeneratorAgent(client)
-                    await asyncio.gather(*(run_one(task, runner) for task in tasks))
+                    await run_all(runner)
                 finally:
                     await client.aclose()
             else:
@@ -360,7 +465,7 @@ async def _run(args: argparse.Namespace) -> None:
                     settings, graph_client, call_logger=logger
                 )
                 try:
-                    await asyncio.gather(*(run_one(task, runner) for task in tasks))
+                    await run_all(runner)
                 finally:
                     for client in clients:
                         await client.aclose()
@@ -368,6 +473,20 @@ async def _run(args: argparse.Namespace) -> None:
         output.close()
         logger.close()
     print(json.dumps({"run": str(args.out), "calls": str(calls_path), "completed": len(completed)}))
+
+
+def validate_task_contents(tasks, reference_tasks):
+    """Reject question, gold-query or answer drift even when ordered QIDs match."""
+    for task, reference in zip(tasks, reference_tasks, strict=True):
+        if (
+            reference.graph != "company"
+            or task.get("graph", "company") != "company"
+            or task["nl_question"] != reference.nl_question
+            or task["gold_cypher"] != reference.gold_cypher
+            or normalize_answer_rows(parse_answer_json(task["answer_json"]))
+            != normalize_answer_rows(parse_answer_json(reference.answer_json))
+        ):
+            raise ValueError(f"ANA and reference task content differs: {task['qid']}")
 
 
 def main() -> None:

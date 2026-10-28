@@ -10,6 +10,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
+from agent_native_graph.llm_providers.accounting import summarize_ledgers
 from agent_native_graph.research_common import read_jsonl, write_jsonl
 
 DEFAULT_ARCHIVE_ROOT = Path(".local-results/baselines/multigraphrag/cypherbench-company")
@@ -95,6 +96,9 @@ def archive(run: Path, root: Path, tasks_path: Path, graph_path: Path) -> Path:
         "average_elapsed_s": sum(float(row.get("elapsed_s") or 0) for row in rows) / total,
         "error_classes": dict(error_classes),
     }
+    accounting = summarize_ledgers([row.get("request_accounting") for row in rows])
+    if accounting is not None:
+        summary["request_accounting"] = accounting
     manifest = {
         **metadata,
         "run_id": run_id,

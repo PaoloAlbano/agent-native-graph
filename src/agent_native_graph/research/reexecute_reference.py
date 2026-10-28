@@ -3,7 +3,6 @@
 import argparse
 import hashlib
 import json
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from neo4j import READ_ACCESS, GraphDatabase, Query
 from agent_native_graph.research.docs_comparison import git_bytes, key, profile, validate_trace
 from agent_native_graph.research.docs_results import read_runs
 from agent_native_graph.research.load_simplekg_neo4j import load_simplekg
+from agent_native_graph.research.read_only import execute_read_only as execute_read_only
 from agent_native_graph.research_common import (
     add_neo4j_args,
     append_jsonl,
@@ -79,41 +79,6 @@ def database_snapshot(driver, database: str) -> dict:
             )
         )
     return {"nodes": nodes, "edges": edges}
-
-
-def execute_read_only(
-    driver, database: str, cypher: str | None, timeout: float, max_rows: int = 100000
-) -> dict:
-    """Check Neo4j's query type, execute with a real transaction timeout, always rollback."""
-    started = time.perf_counter()
-    result = {"ok": False, "rows": [], "columns": [], "error": None, "failure_class": None}
-    try:
-        if not isinstance(cypher, str) or not cypher.strip():
-            raise ValueError("missing_generated_cypher")
-        with driver.session(database=database, default_access_mode=READ_ACCESS) as session:
-            summary = session.run(Query("EXPLAIN " + cypher, timeout=timeout)).consume()
-            if summary.query_type != "r":
-                raise ValueError("non_read_query_rejected")
-            with session.begin_transaction(timeout=timeout) as tx:
-                try:
-                    cursor = tx.run(cypher)
-                    result["columns"] = list(cursor.keys())
-                    rows = []
-                    for record in cursor:
-                        if len(rows) >= max_rows:
-                            raise ValueError("result_row_limit")
-                        rows.append(list(record.values()))
-                    result.update(ok=True, rows=normalize_answer_rows(rows))
-                finally:
-                    tx.rollback()
-    except Exception as exc:
-        result["error"] = f"{type(exc).__name__}: {exc}"
-        result.update(ok=False, rows=[])
-        result["failure_class"] = getattr(exc, "code", None) or (
-            str(exc) if isinstance(exc, ValueError) else type(exc).__name__
-        )
-    result["elapsed_s"] = time.perf_counter() - started
-    return result
 
 
 def summarize(rows: list[dict]) -> dict:
