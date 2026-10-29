@@ -144,6 +144,21 @@ archiving. Their default full-split experiment is not automatically the publishe
 100-QID comparison. Follow the [comparison contributor workflow](docs/multigraphrag-comparison.md#contributor-workflow)
 to add compatible baseline evidence or repeat the common-result evaluation.
 
+The explicit `single_retrieval` and `agentic_retrieval` research modes omit only
+final prose interpretation; original modes remain available. See
+[retrieval-only variants](docs/reproduction.md#retrieval-only-reference-variants)
+and run `make test-reference` for offline pinned-controller parity checks.
+
+To prepare the proposed controlled comparison **without database or model calls**:
+
+```bash
+make controlled-plan CONTROLLED_OUT=/tmp/ana-controlled-plan.json
+```
+
+This records input/profile fingerprints and the proposed schedule, not launch
+approval. The [controlled protocol](docs/controlled-company-protocol.md#prepare-the-offline-plan)
+lists the remaining implementation gates; historical results stay unchanged.
+
 ## Preview or Build the Website
 
 ```bash
@@ -277,6 +292,13 @@ Offline tests use a versioned synthetic schema. `make test-backend` opts in to
 Neo4j integration tests and requires the prepared Company dataset. Skipped
 integration cases are not certified by an offline test pass. See
 [reproduction](docs/reproduction.md#tests-and-documentation) for details.
+
+`make test-distribution` separately verifies an installed wheel and the Docker
+HTTP service on a disposable synthetic Neo4j graph, without Company or an LLM.
+It requires Docker; see [distribution smoke and current graph requirements](docs/library-and-server.md#reproducible-distribution-smoke).
+An opt-in [transaction identity mode](docs/library-and-server.md#experimental-transaction-identity-opt-in)
+supports nodes without application IDs, with a bounded workflow lifetime;
+default benchmark/server identity and tool/prompt contracts remain unchanged.
 
 Curated ANA archives contain `manifest.json`, `summary.json`, `failures.jsonl`
 and `run.jsonl`; new runs also include sanitized `run-config.json` provenance.

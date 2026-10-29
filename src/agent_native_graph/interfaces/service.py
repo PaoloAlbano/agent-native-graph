@@ -84,6 +84,8 @@ def _default_backend_factory(schema_entry: str) -> BackendFactory:
             query_timeout_s=config.query_timeout_s,
             schema_entry=schema_entry,
             handle_store=store,
+            identity_mode=config.identity_mode,
+            workflow_timeout_s=config.workflow_timeout_s,
         )
 
     return factory

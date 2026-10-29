@@ -71,6 +71,11 @@ def test_draft_references_exact_unchanged_llm_profiles(design):
     assert design["controls"]["automatic_final_fetch"] is False
     assert design["controls"]["wrapper_planning"] is False
     assert design["controls"]["runner_guardrails"] is False
+    from agent_native_graph.application.result_policy import result_policy
+
+    policy = result_policy(design["controls"]["result_policy"])
+    assert policy.max_rows == design["controls"]["result_row_cap"] == 100000
+    assert policy.preview_rows == design["controls"]["feedback_preview_rows"] == 20
 
 
 def test_protocol_source_links_resolve():

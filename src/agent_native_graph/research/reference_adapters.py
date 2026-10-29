@@ -5,13 +5,42 @@ using reference_source. No reference checkout or global factory is patched.
 """
 
 import asyncio
+from types import SimpleNamespace
 
+from agent_native_graph.application.result_policy import (
+    CandidatePreviewGraph,
+    candidate_result,
+    completeness,
+    record_observation,
+)
 from agent_native_graph.llm_providers.accounting import request_role
 from agent_native_graph.llm_providers.execution import ensure_question_open, gather_and_settle
 from agent_native_graph.research.read_only import execute_read_only_async
 
+RETRIEVAL_MODES = {"single_retrieval": "single", "agentic_retrieval": "agentic"}
+RETRIEVAL_REFERENCE_COMMIT = "72fe7105310c85ebe6b1b3b7d4c6152ddb206393"
+REFERENCE_MODES = ("direct", "single", "agentic", *RETRIEVAL_MODES)
 
-def guarded_graph_class(*, timeout: float, max_rows: int):
+
+def workflow_mode(mode):
+    """Resolve explicit variants without silently treating unknown modes as agentic."""
+    if mode not in REFERENCE_MODES:
+        raise ValueError(f"Unknown reference mode: {mode}")
+    return RETRIEVAL_MODES.get(mode, mode)
+
+
+class RetrievalFinalizer:
+    """Satisfy the reference interpreter seam locally, without generating prose.
+
+    The original workflows still select their own terminal query/outcome. This
+    stateless collaborator neither repairs results nor adds retrieval calls.
+    """
+
+    async def interpret(self, *, question, outcome):
+        return SimpleNamespace(answer=None)
+
+
+def guarded_graph_class(*, timeout: float, max_rows: int, policy=None):
     """Guard every query, including inherited introspection and entity verification."""
     from multigraphrag.graph.memgraph_client import MemgraphClient
     from multigraphrag.graph.models import QueryOutcome
@@ -28,13 +57,31 @@ def guarded_graph_class(*, timeout: float, max_rows: int):
                 hard_limit,
                 parameters=parameters,
             )
+            limit = (
+                min(max_rows, policy.preview_rows) if policy and candidate_result() else max_rows
+            )
+            if policy:
+                record_observation(
+                    {
+                        "phase": "candidate" if candidate_result() else "introspection",
+                        **completeness(
+                            policy,
+                            scope="query",
+                            available=len(result["rows"]) if result["ok"] else None,
+                            collected=len(result["rows"]),
+                            preview=min(len(result["rows"]), limit),
+                            complete=result["ok"],
+                            error=result["error"],
+                        ),
+                    }
+                )
             if not result["ok"]:
                 return QueryOutcome(success=False, error_message=result["error"])
             rows = result["rows"]
             return QueryOutcome(
                 success=True,
-                records=[dict(zip(result["columns"], row, strict=True)) for row in rows[:max_rows]],
-                truncated=len(rows) > max_rows,
+                records=[dict(zip(result["columns"], row, strict=True)) for row in rows[:limit]],
+                truncated=len(rows) > limit,
             )
 
     return ReadOnlyReferenceGraph
@@ -113,8 +160,10 @@ def profile_client(provider, *, role: str, logger, concurrency: int):
     return instance
 
 
-def build_profile_runner(mode, settings, graph_client, provider, logger):
-    """Compose unchanged reference agents/workflows; replace only their LLM adapter."""
+def build_profile_runner(mode, settings, graph_client, provider, logger, *, policy=None):
+    """Keep reference controllers; explicit retrieval variants bypass only final prose."""
+    retrieval_only = mode in RETRIEVAL_MODES
+    mode = workflow_mode(mode)
     from multigraphrag.agents.entity_extractor import NamedEntityExtractorAgent
     from multigraphrag.agents.evaluator import QueryEvaluatorAgent
     from multigraphrag.agents.feedback_aggregator import FeedbackAggregatorAgent
@@ -133,13 +182,16 @@ def build_profile_runner(mode, settings, graph_client, provider, logger):
     generator = QueryGeneratorAgent(client("query_generator"))
     if mode == "direct":
         return generator
-    interpreter = InterpreterAgent(client("interpreter"))
+    interpreter = (
+        RetrievalFinalizer() if retrieval_only else InterpreterAgent(client("interpreter"))
+    )
     workflow = settings.workflow
+    controller_graph = CandidatePreviewGraph(graph_client) if policy else graph_client
     if mode == "single":
         return SinglePassRunner(
             generator,
             interpreter,
-            graph_client,
+            controller_graph,
             max_attempts=workflow.max_refinement_iterations,
             max_query_result_rows=workflow.max_query_result_rows,
         )
@@ -154,7 +206,7 @@ def build_profile_runner(mode, settings, graph_client, provider, logger):
     )
     return GraphRAGPipeline(
         bundle,
-        graph_client,
+        controller_graph,
         [],
         max_refinement_iterations=workflow.max_refinement_iterations,
         max_query_result_rows=workflow.max_query_result_rows,

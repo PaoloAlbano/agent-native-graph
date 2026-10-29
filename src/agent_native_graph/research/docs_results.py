@@ -46,11 +46,13 @@ def read_runs(root: Path) -> list[dict[str, Any]]:
         payload = (folder / "run.jsonl").read_bytes()
         if hashlib.sha256(payload).hexdigest() != manifest["run_sha256"]:
             raise ValueError(f"Checksum mismatch: {folder.name}")
+        requires_integrity = False
         if manifest.get("run_config_sha256"):
             config_payload = (folder / "run-config.json").read_bytes()
             if hashlib.sha256(config_payload).hexdigest() != manifest["run_config_sha256"]:
                 raise ValueError(f"Run configuration checksum mismatch: {folder.name}")
             config = json.loads(config_payload)
+            requires_integrity = config.get("options", {}).get("verify_graph_block", False)
             for field in (
                 "model",
                 "temperature",
@@ -64,6 +66,17 @@ def read_runs(root: Path) -> list[dict[str, Any]]:
             ):
                 if config[field] != manifest[field]:
                     raise ValueError(f"Run configuration {field} mismatch: {folder.name}")
+        if requires_integrity and not manifest.get("graph_integrity_sha256"):
+            raise ValueError("Missing graph integrity evidence")
+        if manifest.get("graph_integrity_sha256"):
+            from agent_native_graph.research.graph_integrity import validate_integrity
+
+            path = folder / "graph-integrity.json"
+            if hashlib.sha256(path.read_bytes()).hexdigest() != manifest["graph_integrity_sha256"]:
+                raise ValueError("Graph integrity checksum mismatch")
+            evidence = validate_integrity(path, folder / "run.jsonl")
+            if evidence["graph_sha256"] != manifest["graph_sha256"]:
+                raise ValueError("Graph integrity input mismatch")
         records = [json.loads(line) for line in payload.splitlines() if line.strip()]
         questions = {r["qid"]: (r["nl_question"], r["gold_cypher"], r["expected"]) for r in records}
         if len(records) != 347 or len(questions) != 347:

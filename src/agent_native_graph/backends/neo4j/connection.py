@@ -18,6 +18,8 @@ def connect_neo4j(
     schema_entry: str = "overview",
     database: str | None = None,
     handle_store: HandleStore | None = None,
+    identity_mode: str = "property",
+    workflow_timeout_s: int = 30,
 ) -> backend.Neo4jGraphBackend:
     """Open a tool workflow on an existing Neo4j graph, without a model or benchmark.
 
@@ -28,8 +30,15 @@ def connect_neo4j(
     Database selection applies to discovery and queries; None keeps the account
     default. A session owner may inject its store; otherwise IDs are isolated
     to this public workflow rather than using the research runner's local IDs.
+
+    identity_mode='transaction' opts into engine references inside a single
+    bounded read transaction. It never writes id properties. Its lifetime starts
+    at the first query and is min(workflow_timeout_s, query_timeout_s) when the
+    latter is set. It is not a durable ID or snapshot-isolation contract.
+    Deletion of any observed node, timeout, or transaction failure invalidates
+    the workflow; callers must explicitly close/recreate it, never resume it.
     """
-    Neo4jConfig(uri, user, password, database, query_timeout_s)
+    Neo4jConfig(uri, user, password, database, query_timeout_s, identity_mode, workflow_timeout_s)
     if schema_entry not in SCHEMA_ENTRY_MODES:
         raise ValueError(f"Unknown schema entry mode: {schema_entry}")
     database_options = {"database": database} if database is not None else {}
@@ -46,4 +55,9 @@ def connect_neo4j(
         schema_entry=schema_entry,
         **database_options,
         handle_store=handle_store if handle_store is not None else HandleStore.isolated(),
+        **(
+            {"identity_mode": identity_mode, "workflow_timeout_s": workflow_timeout_s}
+            if identity_mode != "property"
+            else {}
+        ),
     )

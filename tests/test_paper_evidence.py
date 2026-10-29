@@ -9,6 +9,7 @@ import pytest
 
 from agent_native_graph import get_tool_specs
 from agent_native_graph.research.docs_comparison import git_bytes, profile
+from agent_native_graph.research.evaluation_storage import EvaluationReader
 
 ROOT = Path(__file__).resolve().parents[1]
 PAPER = ROOT / "paper"
@@ -275,7 +276,12 @@ def test_worked_example_queries_are_saved_queries_not_idealized_rewrites(
         for baseline in baselines:
             row = next(
                 r
-                for r in map(json.loads, (folder / baseline["file"]).open())
+                for r in map(
+                    json.loads,
+                    EvaluationReader(folder)
+                    .read(baseline["file"], baseline["sha256"])
+                    .splitlines(),
+                )
                 if r["qid"] == case["qid"]
             )
             assert queries[index * 2 + 1] == row["query"]

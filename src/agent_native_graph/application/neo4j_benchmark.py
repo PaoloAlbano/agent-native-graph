@@ -20,6 +20,13 @@ from agent_native_graph.application.metrics import (
     _update_summary,
     classify_failure,
 )
+from agent_native_graph.application.result_policy import (
+    collect_handle,
+    completeness,
+)
+from agent_native_graph.application.result_policy import (
+    result_policy as get_result_policy,
+)
 from agent_native_graph.application.run_config import (
     apply_profile,
     config_path,
@@ -99,6 +106,8 @@ def main() -> None:
     parser.add_argument("--enable-planning-tools", action="store_true")
     parser.add_argument("--wrapper-planning", action="store_true")
     parser.add_argument("--auto-fetch-on-done", action="store_true")
+    parser.add_argument("--result-policy", choices=("bounded-v1",))
+    parser.add_argument("--verify-graph-block", action="store_true")
     parser.add_argument(
         "--evaluation-fetch-all-pages",
         action="store_true",
@@ -133,6 +142,10 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
+    if args.verify_graph_block and (not args.shared_preflight or args.resume or args.check_only):
+        parser.error(
+            "--verify-graph-block requires --shared-preflight and does not support --resume/--check-only"
+        )
     if args.database is not None and not args.shared_preflight:
         parser.error(
             "--database requires --shared-preflight; legacy database behavior is unchanged"
@@ -170,7 +183,49 @@ def main() -> None:
             return
         if args.profile and not args.shared_preflight:
             _verify_graph(args)
-        _execute(args, tasks, schema)
+        block = None
+        if args.verify_graph_block:
+            from agent_native_graph.research.graph_integrity import GraphBlock
+
+            block = GraphBlock(
+                args.out,
+                config_path(args.out),
+                args.graph_file,
+                args.shared_preflight_artifact,
+                [t["qid"] for t in tasks],
+            )
+            block.start()
+        failed = True
+        try:
+            _execute(args, tasks, schema)
+            failed = False
+        finally:
+            if block is not None:
+                _finish_graph_block(args, block, failed)
+
+
+def _finish_graph_block(args, block, failed):
+    """Postcheck after worker shutdown; never mask a primary benchmark exception."""
+    from neo4j import GraphDatabase
+
+    from agent_native_graph.research.common_preflight import graph_snapshot
+    from agent_native_graph.research.graph_integrity import GraphIntegrityError
+
+    after, failure = None, None
+    try:
+        with GraphDatabase.driver(
+            args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+        ) as driver:
+            after = graph_snapshot(driver, block.database)
+    except Exception as exc:
+        failure = type(exc).__name__
+    try:
+        report = block.finish(after, run_failed=failed, postcheck_error=failure)
+        if not failed and report["status"] != "verified":
+            raise GraphIntegrityError("Graph block is not verified; inspect the integrity sidecar")
+    except Exception:
+        if not failed:
+            raise
 
 
 def _prepare_shared_preflight(args):
@@ -239,6 +294,7 @@ def _execute(args, tasks: list[dict], schema: dict) -> None:
         "evaluation_fetch_all_pages": args.evaluation_fetch_all_pages,
         "enable_runner_guardrails": args.enable_runner_guardrails,
         "task_timeout_s": args.task_timeout_s,
+        "result_policy": getattr(args, "result_policy", None),
     }
     shared = getattr(args, "shared_preflight_artifact", None)
     if shared is not None:
@@ -284,6 +340,7 @@ def _run_agent_task(
     task_timeout_s: int | None,
     schema_bootstrap: str | None = None,
     database: str | None = None,
+    result_policy: str | None = None,
 ) -> dict[str, Any]:
     from agent_native_graph.backends.neo4j.backend import Neo4jGraphBackend
 
@@ -304,12 +361,34 @@ def _run_agent_task(
     error: str | None = None
     llm_call_count = 0
     accounting = RequestAccounting()
+    policy = get_result_policy(result_policy)
+    final_coverage = None
     planning_required = wrapper_planning and _requires_wrapper_planning(schema, task["nl_question"])
     planning_injected = False
 
     def call_tool(tool, args):
+        nonlocal final_coverage
         deadline.remaining()
-        result = backend.call(tool, args)
+        effective = dict(args)
+        if policy and tool == "fetch" and type(effective.get("limit")) is int:
+            effective["limit"] = min(effective["limit"], policy.max_rows)
+        result = backend.call(tool, effective)
+        if tool == "fetch" and policy:
+            final_coverage = None
+            try:
+                result = collect_handle(backend, {"args": args}, result, policy)
+            except Exception as exc:
+                final_coverage = completeness(
+                    policy,
+                    scope="stored_handle",
+                    available=result.get("total_count"),
+                    collected=0,
+                    preview=0,
+                    complete=False,
+                    error=str(exc),
+                )
+                raise
+            final_coverage = result["result_completeness"]
         deadline.remaining()
         return result
 
@@ -348,6 +427,17 @@ def _run_agent_task(
                 f"{json.dumps(action.get('args') or {}, ensure_ascii=False)[:120]}"
             )
             if tool == "done":
+                if policy is not None:
+                    transcript.append(
+                        {
+                            "action": action,
+                            "result": {
+                                "status": "tool_error",
+                                "error": "done_disabled: bounded-v1 requires an explicit fetch tool call.",
+                            },
+                        }
+                    )
+                    continue
                 if backend.last_fetch is None:
                     handle = _latest_fetchable_handle(transcript)
                     if handle is not None:
@@ -359,7 +449,7 @@ def _run_agent_task(
                         _log(f"  -> auto tool=fetch args={{'from': '{handle}'}}")
                         try:
                             result = call_tool("fetch", dict(fetch_action["args"]))
-                            if evaluation_fetch_all_pages:
+                            if evaluation_fetch_all_pages and policy is None:
                                 result = _evaluation_fetch_all_pages(
                                     backend,
                                     fetch_action,
@@ -391,7 +481,7 @@ def _run_agent_task(
             try:
                 result = call_tool(str(tool), dict(action.get("args") or {}))
                 if tool == "fetch":
-                    if evaluation_fetch_all_pages:
+                    if evaluation_fetch_all_pages and policy is None:
                         result = _evaluation_fetch_all_pages(backend, action, result)
                     result = _benchmark_fetch_preview(result)
                 deadline.remaining()
@@ -435,7 +525,12 @@ def _run_agent_task(
                 planning_injected = True
             if tool == "fetch":
                 break
-            if auto_fetch_on_done and step_i == max_steps - 1 and backend.last_fetch is None:
+            if (
+                policy is None
+                and auto_fetch_on_done
+                and step_i == max_steps - 1
+                and backend.last_fetch is None
+            ):
                 handle = _latest_fetchable_handle(transcript)
                 if handle is not None:
                     fetch_action = {
@@ -447,7 +542,7 @@ def _run_agent_task(
                     _log(f"  -> auto tool=fetch args={{'from': '{handle}'}} reason=max_steps")
                     try:
                         fetch_result = call_tool("fetch", dict(fetch_action["args"]))
-                        if evaluation_fetch_all_pages:
+                        if evaluation_fetch_all_pages and policy is None:
                             fetch_result = _evaluation_fetch_all_pages(
                                 backend,
                                 fetch_action,
@@ -483,6 +578,18 @@ def _run_agent_task(
     tool_metric_summary = _summarize_tool_metrics(transcript)
     elapsed = time.perf_counter() - started
     ok = error is None and backend.last_fetch is not None
+    if policy:
+        final_coverage = final_coverage or completeness(
+            policy,
+            scope="stored_handle",
+            available=None,
+            collected=0,
+            preview=0,
+            complete=False,
+            error=error or "no_final_fetch",
+        )
+        ok = ok and final_coverage["complete"]
+        matches = ok and matches
     _log(
         f"END   {task['qid']} | ok={ok} "
         f"match={matches} tools={tool_call_count} errors={tool_error_count} "
@@ -509,6 +616,8 @@ def _run_agent_task(
         "error": error,
     }
     row["failure_class"] = classify_failure(row)
+    if policy:
+        row["result_completeness"] = final_coverage
     return row
 
 

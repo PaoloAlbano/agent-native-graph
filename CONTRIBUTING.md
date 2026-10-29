@@ -27,6 +27,14 @@ ignored dataset files. `make test-backend` opts in to read-only integration
 tests against the prepared Company graph; a skip is not a verified integration.
 Never load or clear someone else's database to make a test pass.
 
+For library/container distribution, `make test-distribution` builds a wheel
+and the shipped Dockerfile and exercises a synthetic graph in a disposable
+Neo4j container. It creates and cleans up its own Docker resources; it does not
+use the Company database or call a model. Docker and uv are required. This is
+opt-in and skipped in the ordinary offline suite. See the
+[distribution smoke](docs/library-and-server.md#reproducible-distribution-smoke)
+for coverage, graph identity requirements and cleanup limitations.
+
 For documentation, run `make docs-build` with the pinned reference repository
 available as described in [site maintenance](docs/site/README.md). CI validates
 every branch push and pull request, and publishes Pages from `main` only.

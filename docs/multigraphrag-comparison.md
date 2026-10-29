@@ -86,10 +86,10 @@ not every historical experimental condition identical.
 
 The currently selected evaluation,
 `results/cypherbench-company/query-reexecution/2026-10-29-three-model-matrix/`, contains
-a manifest, 100 golden-query executions and twenty-four files of 100 baseline-query
+a manifest, 100 golden-query executions and twenty-four logical files of 100 baseline-query
 executions. It covers all thirteen current ANA full runs, including all four
 GPT-OSS-20B profiles. Previous evaluations, including `2026-10-28-qwen-matrix/`,
-remain unchanged as historical evidence. All sixteen previously evaluated
+retain byte-identical manifests and reconstructible JSONL evidence. All sixteen previously evaluated
 baseline scores were reproduced; eight newly evaluated baselines complete the
 GPT-OSS-20B matrix. In total, 2,500 saved queries were attempted with
 no model calls. Missing future comparisons are still explicitly marked rather
@@ -193,6 +193,14 @@ The output directory must not exist. Completed evidence can be selected through
 `execution_evaluation` in `docs/site/comparison-source.json`. Builds reject
 incomplete evaluations and mismatched checksums, source traces, or QID coverage.
 
+Completed evaluations are sealed automatically into shared compact storage:
+`storage.json` plus content-addressed gzip packs in the parent `_objects/`.
+The original manifest/checksums and every logical JSONL byte are preserved;
+the site reads both compact and historical standalone formats. See
+[the evidence layout and export command](../results/README.md) before moving
+an evaluation between archives. The module's `--storage legacy` option retains
+standalone JSONL output when needed. Compaction does not execute queries or models.
+
 No original baseline archive is added to `results/`. External evidence remains sourced
 from its Git repository; sources under `docs/site/` generate the presentation
 under ignored `build/site/` (or the clean CI output directory). Large JSON disclosures are lazy
@@ -228,8 +236,10 @@ and bounded, while complete generated records remain downloadable.
 5. Set `execution_evaluation` in `docs/site/comparison-source.json` to the new
    repository-relative directory and run `make docs-build`. Existing evaluation
    folders are immutable evidence: do not overwrite them or manually edit scores.
-6. Commit the complete evaluation directory and updated source configuration.
-   Include all JSONL files and the manifest together, not only summary scores.
+6. Commit the complete evaluation directory, referenced `_objects/` packs and
+   updated source configuration. Include `manifest.json` and `storage.json`
+   together with the packs, not only summary scores. For legacy output, include
+   all JSONL files with the manifest instead.
    Do not commit the downloaded graph, credentials, or generated website files.
    The pull-request Action validates/builds; merge to `main` publishes Pages.
 

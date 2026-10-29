@@ -77,16 +77,40 @@ def test_unknown_handle_is_not_replaced_by_an_empty_page():
         backend.call("fetch", {"from": "h-missing"})
 
 
-@pytest.mark.parametrize("fetch_all", [False, True])
-def test_benchmark_keeps_preview_transcripts_and_complete_scoring(monkeypatch, fetch_all):
+@pytest.mark.parametrize(
+    "fetch_all,policy,failure",
+    [
+        (False, None, None),
+        (True, None, None),
+        (False, "bounded-v1", None),
+        (True, "bounded-v1", None),
+        (False, "bounded-v1", "cap"),
+        (True, "bounded-v1", "cap"),
+        (False, "bounded-v1", "no_fetch"),
+        (True, "bounded-v1", "no_fetch"),
+    ],
+)
+def test_benchmark_keeps_preview_transcripts_and_complete_scoring(
+    monkeypatch, fetch_all, policy, failure
+):
+    if failure == "cap":
+        from agent_native_graph.application.result_policy import BoundedResults
+
+        monkeypatch.setattr(
+            neo4j_benchmark, "get_result_policy", lambda name: BoundedResults(max_rows=3)
+        )
     backend, handle = table_backend(25)
     monkeypatch.setattr(backend_module, "Neo4jGraphBackend", lambda *a, **kw: backend)
     monkeypatch.setattr(
         neo4j_benchmark,
         "_next_action",
-        lambda *a, **kw: {"tool": "fetch", "args": {"from": handle, "limit": 21}},
+        lambda *a, **kw: (
+            {"tool": "done", "args": {}}
+            if failure == "no_fetch"
+            else {"tool": "fetch", "args": {"from": handle, "limit": 21}}
+        ),
     )
-    expected = [[i] for i in range(25 if fetch_all else 21)]
+    expected = [] if failure else [[i] for i in range(25 if fetch_all or policy else 21)]
     row = neo4j_benchmark._run_agent_task(
         {
             "qid": "test",
@@ -110,13 +134,93 @@ def test_benchmark_keeps_preview_transcripts_and_complete_scoring(monkeypatch, f
         evaluation_fetch_all_pages=fetch_all,
         enable_runner_guardrails=False,
         task_timeout_s=None,
+        result_policy=policy,
     )
+    if failure:
+        assert not row["ok"] and not row["matches_answer_json"]
+        assert not row["result_completeness"]["complete"]
+        assert row["rows"] == []
+        if failure == "cap":
+            assert row["result_completeness"]["error"] == "result_row_limit"
+        return
     assert row["ok"] and row["matches_answer_json"] and row["rows"] == expected
     result = row["transcript"][0]["result"]
     assert result["rows"] == expected[:20] and result["returned_count"] == len(expected)
     assert not {"contract_version", "preview", "preview_truncated"} & result.keys()
-    assert result.get("evaluation_fetch_all_pages", False) == fetch_all
+    assert result.get("evaluation_fetch_all_pages", False) == (fetch_all and policy is None)
+    if policy:
+        assert row["result_completeness"]["complete"]
+        assert row["result_completeness"]["scope"] == "stored_handle"
+        assert row["result_completeness"]["upstream_completeness"] == "unknown"
     backend._driver.close.assert_called_once()
+
+
+@pytest.mark.parametrize("policy", [None, "bounded-v1"])
+@pytest.mark.parametrize("ending", ["done", "max_steps", "explicit_fetch", "done_then_fetch"])
+def test_bounded_policy_never_finalizes_an_intermediate_handle_automatically(
+    monkeypatch, policy, ending
+):
+    backend, handle = table_backend(1)
+    original_call = backend.call
+    calls = []
+
+    def call(tool, args):
+        calls.append(tool)
+        if tool == "node_scan":
+            return {"handle": handle, "kind": "table", "matched_count": 1}
+        return original_call(tool, args)
+
+    monkeypatch.setattr(backend, "call", call)
+    monkeypatch.setattr(backend_module, "Neo4jGraphBackend", lambda *a, **kw: backend)
+    planned = [
+        {"tool": "node_scan", "args": {}},
+        {"tool": "fetch", "args": {"from": handle}}
+        if ending == "explicit_fetch"
+        else {"tool": "done", "args": {}},
+    ]
+    if ending == "done_then_fetch":
+        planned.append({"tool": "fetch", "args": {"from": handle}})
+    actions = iter(planned)
+    monkeypatch.setattr(neo4j_benchmark, "_next_action", lambda *a, **kw: next(actions))
+    row = neo4j_benchmark._run_agent_task(
+        {
+            "qid": "finalization",
+            "nl_question": "Return the value",
+            "gold_cypher": "RETURN 0",
+            "answer_json": [[0]],
+        },
+        llm=None,
+        schema={},
+        neo4j_uri="bolt://example.invalid",
+        neo4j_user="test",
+        neo4j_password="test",
+        neo4j_query_timeout_s=30,
+        max_steps=1 if ending == "max_steps" else len(planned),
+        native_tools=True,
+        tool_choice="auto",
+        enable_planning_tools=False,
+        schema_entry="overview",
+        wrapper_planning=False,
+        auto_fetch_on_done=ending == "max_steps",
+        evaluation_fetch_all_pages=False,
+        enable_runner_guardrails=False,
+        task_timeout_s=None,
+        result_policy=policy,
+    )
+    should_fetch = policy is None or ending in ("explicit_fetch", "done_then_fetch")
+    assert ("fetch" in calls) == should_fetch
+    assert row["ok"] == row["matches_answer_json"] == should_fetch
+    assert row["rows"] == ([[0]] if should_fetch else [])
+    if policy:
+        assert row["result_completeness"]["complete"] == should_fetch
+        assert not any(step["action"].get("auto") for step in row["transcript"])
+        if ending == "done_then_fetch":
+            assert [step["action"]["tool"] for step in row["transcript"]] == [
+                "node_scan",
+                "done",
+                "fetch",
+            ]
+            assert row["transcript"][1]["result"]["status"] == "tool_error"
 
 
 def test_entity_deduplication_happens_before_page_offsets():

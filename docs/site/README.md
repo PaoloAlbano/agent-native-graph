@@ -47,6 +47,10 @@ are uploaded. Editorial Markdown files remain available through repository links
 To contribute a Company run, add its complete archive (`manifest.json`,
 `summary.json`, `failures.jsonl`, `run.jsonl`, `run-config.json`) under
 `results/cypherbench-company/full/runs/<unique-run-id>/` and open a pull request.
+Runs that enabled before/after graph verification must also include the
+checksummed `graph-integrity.json`. Missing, unverified or inconsistent evidence
+is rejected before presentation; historical archives without that opt-in feature
+keep their original file layout. See [block verification](../reproduction.md#beforeafter-graph-block-verification).
 The workflow validates and builds the site without publishing from pull requests.
 After merge to `main`, the complete CI pipeline rebuilds and publishes Pages
 automatically if all checks pass. No hand
@@ -136,3 +140,7 @@ see [the comparison protocol](../multigraphrag-comparison.md) for limitations.
 The separate common-metric table reads committed query-reexecution evidence,
 not a fresh database query during build. It measures baseline query-result
 correctness using ANA's exact comparator, not final textual-answer judging.
+The loader accepts both standalone JSONLs and compact `storage.json` indices
+with shared gzip packs; reconstructed bytes must match original manifest hashes.
+The build remains offline. See [evidence storage](../../results/README.md) for
+the layout, migration and standalone export commands.

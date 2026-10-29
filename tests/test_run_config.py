@@ -464,6 +464,55 @@ def test_archiving_needs_only_output_and_can_happen_after_code_inputs_change(
     assert str(root) not in (folders[0] / "run-config.json").read_text()
 
 
+@pytest.mark.parametrize("status", ["verified", "running", "invalid", "missing"])
+def test_archive_and_site_require_graph_integrity_when_declared(experiment, monkeypatch, status):
+    from agent_native_graph.research.graph_integrity import (
+        GraphBlock,
+        GraphIntegrityError,
+        validate_integrity,
+    )
+
+    root, args, tasks = experiment
+    args.verify_graph_block = True
+    config = run_config.save_config(args, tasks, root)
+    args.out.write_text("".join(json.dumps(r) + "\n" for r in results(tasks)))
+    before = {"nodes": {"count": 1, "sha256": "a" * 64}, "edges": {"count": 0, "sha256": "b" * 64}}
+    block = GraphBlock(
+        args.out,
+        run_config.config_path(args.out),
+        args.graph_file,
+        {
+            "database": "benchmark",
+            "snapshot": before,
+            "graph_sha256": config["inputs"]["graph"]["sha256"],
+        },
+        [t["qid"] for t in tasks],
+    )
+    if status != "missing":
+        block.start()
+        if status != "running":
+            block.finish(
+                before
+                if status == "verified"
+                else {**before, "edges": {"count": 0, "sha256": "c" * 64}}
+            )
+    monkeypatch.setattr(
+        "sys.argv", ["archive", "--run", str(args.out), "--root", str(root / "results")]
+    )
+    if status != "verified":
+        with pytest.raises((GraphIntegrityError, FileNotFoundError)):
+            archive_result.main()
+        assert not (root / "results").exists()
+        return
+    archive_result.main()
+    folder = next((root / "results/cypherbench-company/full/runs").iterdir())
+    validate_integrity(folder / "graph-integrity.json", folder / "run.jsonl")
+    assert read_runs(root)
+    (folder / "graph-integrity.json").write_text("{}")
+    with pytest.raises(ValueError, match="Graph integrity checksum"):
+        read_runs(root)
+
+
 def test_archive_rejects_overrides_and_partial_or_foreign_results(experiment, monkeypatch):
     root, args, tasks = experiment
     config = run_config.save_config(args, tasks, root)

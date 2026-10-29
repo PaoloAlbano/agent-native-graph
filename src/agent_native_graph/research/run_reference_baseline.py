@@ -19,6 +19,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+from agent_native_graph.application.result_policy import (
+    completeness,
+    observe_results,
+    record_observation,
+    result_policy,
+)
 from agent_native_graph.application.run_config import (
     execution_identity,
     load_profile,
@@ -34,7 +40,14 @@ from agent_native_graph.llm_providers.execution import (
 from agent_native_graph.llm_providers.openai_compatible import OpenAICompatibleProvider
 from agent_native_graph.llm_providers.settings import LLMCallSettings
 from agent_native_graph.research.read_only import execute_read_only_async
-from agent_native_graph.research.reference_adapters import build_profile_runner, guarded_graph_class
+from agent_native_graph.research.reference_adapters import (
+    REFERENCE_MODES,
+    RETRIEVAL_MODES,
+    RETRIEVAL_REFERENCE_COMMIT,
+    build_profile_runner,
+    guarded_graph_class,
+    workflow_mode,
+)
 from agent_native_graph.research.reference_source import reference_source
 from agent_native_graph.research_common import (
     normalize_answer_rows,
@@ -66,7 +79,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--tasks", type=Path, default=Path("data/tasks_company_test.jsonl"))
     parser.add_argument("--graph", type=Path, default=Path("downloads/company_simplekg.json"))
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--mode", choices=("direct", "single", "agentic"), required=True)
+    parser.add_argument("--mode", choices=REFERENCE_MODES, required=True)
     parser.add_argument("--model", default="openai/gpt-oss-120b")
     parser.add_argument("--base-url", default="https://openrouter.ai/api/")
     parser.add_argument("--api-key-file", type=Path)
@@ -87,6 +100,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--query-timeout", type=float, default=30.0)
     parser.add_argument("--task-timeout", type=float, default=240.0)
     parser.add_argument("--max-score-rows", type=int)
+    parser.add_argument("--result-policy", choices=("bounded-v1",))
+    parser.add_argument("--verify-graph-block", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     return parser.parse_args()
@@ -124,6 +139,22 @@ async def _score_cypher(graph_client, cypher: str | None, expected: list[list], 
     result = await execute_read_only_async(
         graph_client._driver, args.database, cypher, args.query_timeout, args.max_score_rows
     )
+    policy = result_policy(getattr(args, "result_policy", None))
+    if policy:
+        record_observation(
+            {
+                "phase": "scoring",
+                **completeness(
+                    policy,
+                    scope="query",
+                    available=len(result["rows"]) if result["ok"] else None,
+                    collected=len(result["rows"]),
+                    preview=min(len(result["rows"]), policy.preview_rows),
+                    complete=result["ok"],
+                    error=result["error"],
+                ),
+            }
+        )
     rows = result["rows"]
     return result["ok"] and result_matches_answer(rows, expected), rows, result["error"]
 
@@ -140,6 +171,7 @@ async def _prepare_shared_preflight(args):
 
 
 async def _generate_answer(runner, task, schema_text, mode):
+    mode = workflow_mode(mode)
     if mode == "direct":
         generation = await runner.generate(question=task["nl_question"], schema_text=schema_text)
         return SimpleNamespace(cypher=generation.cypher, answer=None, accepted=None, iterations=1)
@@ -195,6 +227,39 @@ async def _execute_question(task, runner, graph_client, schema_text, expected, a
 
 
 async def _run(args: argparse.Namespace) -> None:
+    if getattr(args, "verify_graph_block", False) and (
+        not getattr(args, "shared_preflight", False) or args.resume or args.check_only
+    ):
+        raise ValueError(
+            "--verify-graph-block requires --shared-preflight and does not support --resume/--check-only"
+        )
+    if getattr(args, "verify_graph_block", False):
+        from agent_native_graph.research.graph_integrity import integrity_path
+
+        if any(
+            path.exists()
+            for path in (args.out, args.out.with_suffix(".meta.json"), integrity_path(args.out))
+        ):
+            raise FileExistsError(
+                "Graph verification requires fresh output, metadata and sidecar paths"
+            )
+    policy = result_policy(getattr(args, "result_policy", None))
+    if policy:
+        if not args.profile or not args.reference_commit:
+            raise ValueError("--result-policy requires --profile and --reference-commit")
+        if args.max_score_rows not in (None, policy.max_rows):
+            raise ValueError("bounded-v1 requires --max-score-rows 100000")
+    if getattr(args, "mode", None) in RETRIEVAL_MODES and (
+        not args.profile or not args.reference_commit
+    ):
+        raise ValueError("Retrieval-only modes require --profile and --reference-commit")
+    if (
+        getattr(args, "mode", None) in RETRIEVAL_MODES
+        and args.reference_commit != RETRIEVAL_REFERENCE_COMMIT
+    ):
+        raise ValueError(
+            f"Retrieval-only variants are validated only against {RETRIEVAL_REFERENCE_COMMIT}"
+        )
     if getattr(args, "shared_preflight", False) and not args.profile:
         raise ValueError("--shared-preflight requires --profile and --reference-commit")
     if args.profile and not args.reference_commit:
@@ -235,7 +300,12 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
     from multigraphrag.llm.call_log import CallLogger, _call_context
     from multigraphrag.llm.factory import build_llm_client
 
-    MemgraphClient = guarded_graph_class(timeout=args.query_timeout, max_rows=args.max_score_rows)
+    policy = result_policy(getattr(args, "result_policy", None))
+    MemgraphClient = guarded_graph_class(
+        timeout=args.query_timeout,
+        max_rows=args.max_score_rows,
+        **({"policy": policy} if policy else {}),
+    )
     profile_settings, profile_hash = load_profile(args.profile) if args.profile else (None, None)
     if profile_settings:
         args.temperature = profile_settings["temperature"]
@@ -304,6 +374,9 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
         },
         "approach": f"multigraphrag_{args.mode}",
         "mode": args.mode,
+        "finalization": "retrieval-only-v1"
+        if args.mode in RETRIEVAL_MODES
+        else ("query-only-v1" if args.mode == "direct" else "reference-interpreter"),
         "benchmark": "cypherbench-company",
         "suite": "full" if args.limit == 347 else f"n{args.limit}",
         "split": "test",
@@ -320,6 +393,8 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
         "tasks_sha256": _sha256(args.tasks),
         "graph_sha256": graph_sha,
         "max_score_rows": args.max_score_rows,
+        "result_policy": getattr(args, "result_policy", None),
+        "verify_graph_block": getattr(args, "verify_graph_block", False),
         "call_logs": [],
     }
     if shared is not None:
@@ -413,9 +488,16 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
     calls_path = args.out.with_name(f"{args.out.stem}.calls.{uuid4().hex}.jsonl")
     metadata["call_logs"].append(str(calls_path))
     metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    block = None
+    if getattr(args, "verify_graph_block", False):
+        from agent_native_graph.research.graph_integrity import GraphBlock
+
+        block = GraphBlock(args.out, metadata_path, args.graph, shared, qids)
+        block.start()
     logger = CountingCallLogger(calls_path)
     semaphore = asyncio.Semaphore(args.concurrency)
     output = args.out.open("a", encoding="utf-8")
+    failed = True
     try:
         async with MemgraphClient(settings.memgraph) as graph_client:
             await graph_client.verify_connectivity()
@@ -437,9 +519,10 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
                     expected = normalize_answer_rows(parse_answer_json(task["answer_json"]))
                     cancelled = None
                     try:
-                        result, matches, rows, error = await _execute_question(
-                            task, runner, graph_client, schema_text, expected, args, accounting
-                        )
+                        with observe_results() as observations:
+                            result, matches, rows, error = await _execute_question(
+                                task, runner, graph_client, schema_text, expected, args, accounting
+                            )
                     except asyncio.CancelledError as exc:
                         cancelled = exc
                         result, matches, rows, error = (
@@ -467,6 +550,29 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
                         "error": error,
                         "elapsed_s": time.perf_counter() - started,
                     }
+                    if policy:
+                        row["result_observations"] = observations
+                        final = next(
+                            (
+                                entry
+                                for entry in reversed(observations)
+                                if entry["phase"] == "scoring"
+                            ),
+                            None,
+                        )
+                        row["result_completeness"] = final or completeness(
+                            policy,
+                            scope="query",
+                            available=None,
+                            collected=0,
+                            preview=0,
+                            complete=False,
+                            error=error or "no_final_result",
+                        )
+                        row["matches_answer_json"] = (
+                            matches and row["result_completeness"]["complete"]
+                        )
+                        row["ok"] = row["ok"] and row["result_completeness"]["complete"]
                     output.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
                     output.flush()
                     completed.add(task["qid"])
@@ -485,7 +591,14 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
                     api_key_file=args.api_key_file,
                     settings=LLMCallSettings(**profile_settings),
                 )
-                runner = build_profile_runner(args.mode, settings, graph_client, provider, logger)
+                runner = build_profile_runner(
+                    args.mode,
+                    settings,
+                    graph_client,
+                    provider,
+                    logger,
+                    **({"policy": policy} if policy else {}),
+                )
                 await run_all(runner)
             elif args.mode == "agentic":
                 async with build_pipeline(settings, graph_client, call_logger=logger) as runner:
@@ -508,10 +621,37 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
                 finally:
                     for client in clients:
                         await client.aclose()
+        failed = False
     finally:
         output.close()
         logger.close()
+        if block is not None:
+            await _finish_graph_block(args, block, failed)
     print(json.dumps({"run": str(args.out), "calls": str(calls_path), "completed": len(completed)}))
+
+
+async def _finish_graph_block(args, block, failed):
+    """Run the same content-only postcheck after requests/output settle, including failures."""
+    from neo4j import AsyncGraphDatabase
+
+    from agent_native_graph.research.common_preflight import graph_snapshot_async
+    from agent_native_graph.research.graph_integrity import GraphIntegrityError
+
+    after, failure = None, None
+    try:
+        async with AsyncGraphDatabase.driver(
+            args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+        ) as driver:
+            after = await graph_snapshot_async(driver, block.database)
+    except Exception as exc:
+        failure = type(exc).__name__
+    try:
+        report = block.finish(after, run_failed=failed, postcheck_error=failure)
+        if not failed and report["status"] != "verified":
+            raise GraphIntegrityError("Graph block is not verified; inspect the integrity sidecar")
+    except Exception:
+        if not failed:
+            raise
 
 
 def validate_task_contents(tasks, reference_tasks):

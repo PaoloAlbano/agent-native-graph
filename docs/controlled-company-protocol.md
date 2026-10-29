@@ -31,6 +31,7 @@ before inference, not a post-hoc reinterpretation.
 protocol_id: company-matched-v2-draft
 status: design-only
 execution_authorized: false
+reference_commit: 72fe7105310c85ebe6b1b3b7d4c6152ddb206393
 scope:
   benchmark: cypherbench-company
   graph: company
@@ -59,9 +60,12 @@ controls:
     reference_query_generator_iterations: 5
   global_http_concurrency: 3
   database: neo4j
+  identity_mode: property
   query_timeout_s: 30
   task_deadline_s: 900
   result_row_cap: 100000
+  result_policy: bounded-v1
+  verify_graph_block: true
   feedback_preview_rows: 20
   primary_metric: exact_answer_json_multiset
   automatic_final_fetch: false
@@ -266,9 +270,9 @@ Report all completed replicas regardless of which method wins.
 | G2: shared call policy | Foundation implemented: profile-enabled reference roles call the same ANA provider with the same YAML settings; offline sync/async payload tests cover all four profiles. Pinned reference structured parsing is retained. Request accounting is implemented; common approved deadline values and global HTTP bounds remain G6 work. |
 | G3: generation accounting, no new cap | Passive request ledgers implemented for ANA and profile-enabled reference roles: logical calls, actual POSTs, retry/fallback attempts, observed tokens/coverage, finish/error status and latency. Native limits unchanged. Missing usage remains unknown; a shared cross-role cap is deferred. Legacy reference transport is explicitly uninstrumented. |
 | G4: safe common execution | Foundation implemented: sync saved-query scoring and async live baseline candidate/introspection/final scoring share read classification, named database, transaction timeout, rollback and streaming row-cap semantics. Fake-driver tests cover rejection, bounds, cancellation and non-partial scoring. Database least-privilege permissions remain required; this is not a procedure sandbox. |
-| G5: data/schema/completeness | ANA standard runs check graph content; baseline preflight currently compares dump files and performs connectivity/schema probes, not a full database fingerprint. Add common snapshot and schema-fact checks, result completeness and preview policy. |
+| G5: data/schema/completeness | Shared preflight verifies content and canonical initial schema. Opt-in `bounded-v1` enforces collection/preview bounds and records coverage. Opt-in `--verify-graph-block` compares content before/after a fresh complete invocation and binds the report to raw results/configuration; archivers and site reject unverified evidence when declared. Equal explicit completeness information in controller observations remains pending. Endpoint fingerprints are not snapshot isolation; full-handle coverage is not full graph coverage. |
 | G6: deadline and accounting | Cancellable async HTTP and question-owned sibling cleanup implemented for profile baselines; the existing 240s deadline now includes final scoring. ANA explicit diagnostic deadlines work at concurrency above one, with async HTTP and cooperative checks around synchronous tools. Ledger snapshots follow client cleanup, including cancelled questions. Default ANA/profile values are not unified; common approved values, hard cancellation of synchronous DB work, remote abort confirmation, crash recovery and global HTTP bounds remain pending. Legacy reference transport remains distinct. |
-| G7: frozen retrieval variants | Bypass only the reference prose interpreter, preserving and documenting generation/refinement logic; do not claim the adapter is already implemented. |
+| G7: retrieval variants | Implemented for the pinned revision: explicit `single_retrieval` / `agentic_retrieval` modes inject only a local finalizer into the original controllers. Offline paired tests verify every pre-interpreter prompt/response and graph observation across retry, correction, verification and exhaustion branches. Final launch hashes/approval remain G1/G8. |
 | G8: dry-run and publication | Test with fake providers/graphs first, then an explicitly authorized technical smoke. Freeze a manifest, approve the exact cells, and only then launch complete replicas. Keep new evidence separate from historical archives. |
 
 The relevant implementations are
@@ -287,8 +291,10 @@ documented in [reproduction](reproduction.md#pinned-source-and-shared-provider).
 Passive request accounting and cancellable HTTP are implemented too, with native
 generation limits retained. An [opt-in shared preflight](reproduction.md#opt-in-common-graph-and-schema-preflight)
 now verifies graph content and supplies equal canonical initial schema facts.
-It does not provide an atomic snapshot or after-run certification. G5/G7 still
-require full observation parity and retrieval-only variants; G6 requires common approved
+Shared preflight alone does not certify after-run state. The separate opt-in
+block verifier now provides before/after content evidence, not an atomic snapshot.
+G7 variants are implemented and tested offline; G5 still requires full observation
+information parity. G6 requires common approved
 deadline values, global endpoint admission and crash recovery.
 Only after G8 checks pass should either stage be submitted for launch approval.
 
@@ -304,6 +310,55 @@ automatically when a process exits: review the diff and activate a new version
 explicitly. Do not resume an old run under the changed execution identity.
 
 ## Prospective Artifacts And Approval
+
+### Prepare The Offline Plan
+
+```bash
+make controlled-plan CONTROLLED_OUT=/tmp/ana-controlled-plan.json
+```
+
+This command only reads local inputs and Git objects. It does not connect to
+Neo4j or an inference provider, read credentials, import the reference runner,
+or start a benchmark. Obtain the Company task/graph files using the existing
+[reproduction guide](reproduction.md) first. The output must not already exist.
+Override `TASKS`, `GRAPH` and `REFERENCE_REPO` when necessary.
+
+The protocol's YAML block is the single source for the proposed matrix and
+controls; model-call settings still come from the unchanged YAML profiles.
+The generated JSON records the model, exact profile settings/hashes, source
+fingerprint and dirty flag, graph-file/task hashes, pinned baseline revision,
+and all eighteen proposed blocks. Each profile/replica uses the same question
+permutation across arms, with counterbalanced arm order and alternating profile
+order. QID order is stored explicitly, not left to a later random shuffle.
+
+It always reports `draft-not-launchable` and `execution_authorized: false`.
+File hashes are not live-graph certification, local reference availability does
+not verify reference task contents, and the plan does not freeze rendered model
+requests. Pending gates remain explicit even if local validation succeeds.
+An absent reference checkout is recorded, not silently replaced by another
+revision. Missing/duplicate/mixed-category tasks, changed profiles or a changed
+reference pin reject preparation. No generated draft belongs in `results/`.
+
+Keep `identity_mode: property` for these benchmarks. The new transaction mode
+is an opt-in library/server feature with a bounded workflow lifetime, not an
+unannounced treatment change. Prompt/tool hashes must continue to match the
+frozen historical catalog. Compact evidence storage changes physical files,
+not the scorer or the experimental treatment.
+
+Before launch, complete the following in order:
+
+1. Keep retrieval-only adapters and the opt-in result/block checks frozen; complete
+   common observation information (G5) and global execution limits (G6).
+2. Generate fake-provider trajectories for each arm to test gold-field isolation,
+   native stopping, full-result scoring, role accounting, retries and cancellation.
+3. Freeze code, dependencies, profiles, canonical facts and exact rendered
+   requests; generate a fresh plan after the final changes. A dirty draft is
+   useful provenance, not the frozen launch identity.
+4. Approve a technical inference smoke explicitly; no smoke is launched by
+   this preparation command. Use it to validate provider compatibility and costs.
+5. Establish a spending bound and approve exact matrix cells before full runs.
+   The eighteen blocks / 6,246 questions are proposed workload, not an approved
+   model-call or monetary budget. Native limits are not a shared generation cap.
 
 Before launch, save protocol/profile/source/prompt/schema/task/order hashes,
 model identifiers, known server revision, adapter versions, schedule, budgets

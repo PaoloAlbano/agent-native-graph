@@ -1,4 +1,4 @@
-"""Read-only, before-run graph verification and shared schema evidence.
+"""Read-only graph-content fingerprints and shared initial schema evidence.
 
 This is not an atomic snapshot or a concurrent-writer exclusion protocol.
 """
@@ -357,6 +357,26 @@ def prepare_preflight(driver, database, graph: Path, *, query_timeout_s=300) -> 
             for key, query in _METADATA.items()
         }
     return _report(database, graph_hash, snapshot, _schema(raw), nodes, edges)
+
+
+def graph_snapshot(driver, database, *, query_timeout_s=300):
+    """Read the same full content fingerprint without rebuilding initial schema facts."""
+    with driver.session(**_options(database, query_timeout_s)) as session:
+        nodes = [dict(row) for row in session.run(Query(_NODES, timeout=query_timeout_s))]
+        edges = [dict(row) for row in session.run(Query(_EDGES, timeout=query_timeout_s))]
+    return _snapshot(nodes, edges)
+
+
+async def graph_snapshot_async(driver, database, *, query_timeout_s=300):
+    """Async counterpart; this full scan is still not an atomic database snapshot."""
+    async with driver.session(**_options(database, query_timeout_s)) as session:
+        nodes = [
+            dict(row) async for row in await session.run(Query(_NODES, timeout=query_timeout_s))
+        ]
+        edges = [
+            dict(row) async for row in await session.run(Query(_EDGES, timeout=query_timeout_s))
+        ]
+    return _snapshot(nodes, edges)
 
 
 async def prepare_preflight_async(driver, database, graph: Path, *, query_timeout_s=300) -> dict:

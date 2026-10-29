@@ -30,6 +30,82 @@ database. If omitted, Neo4j's default database for the account is retained.
 
 ## Python Library
 
+### Current Graph Identity Requirement
+
+The prototype is not fully schema-agnostic. Handle-based traversal and several
+set/count operations currently identify nodes through their **`id` property**,
+not Neo4j's internal element ID. For these operations, provide stable, non-null
+IDs unique across participating graph nodes, not merely unique within a label.
+ANA does not add IDs, install constraints or migrate your graph automatically.
+Missing IDs can currently surface as backend errors; duplicate IDs can produce
+incorrect joins. Discovery and scalar whole-label counts do not imply that
+traversal is compatible with an unkeyed graph.
+
+Domain labels need not be Company/Person, and a `name` property is not required
+for scan/project/traversal. Lookup tools may default to `name`; use their
+explicit property parameters where supported. Identifier-independent traversal
+and a consistent precondition-error taxonomy remain future work. Validate your
+schema before connecting the demo to an existing application graph.
+
+### Experimental Transaction Identity (Opt-In)
+
+The default `identity_mode="property"` retains the requirement above and the
+historical benchmark behavior. To remove that requirement for a Python workflow,
+pass `identity_mode="transaction"` to `connect_neo4j`; optionally set
+`workflow_timeout_s` (a positive integer, default 30). For the HTTP adapter:
+
+```bash
+ANA_NEO4J_IDENTITY_MODE=transaction ANA_NEO4J_WORKFLOW_TIMEOUT_S=30 \
+  uv run uvicorn agent_native_graph.interfaces.service:app --host 127.0.0.1 --port 8080
+```
+
+This does **not** migrate properties, add constraints or treat `elementId()` as
+a persistent identifier. The Neo4j adapter holds one explicit read transaction
+per workflow and attaches internal, owner-scoped references to node payloads.
+These references are not serialized into tool JSON or graph properties. Two
+nodes remain distinct even when their application `id` values or all their
+properties are identical; nodes without `id` are supported in this mode.
+Business-property filters and projections of `id` still access that property,
+not the internal reference. Other backends need not use Neo4j's mechanism.
+This also applies to `count_handle(distinct=true)` without `var`: whole-row
+comparison preserves entity identity, distinguishing different nodes with equal
+properties and treating cached versions of the same node as the same entity.
+Scalar-only row comparison and the default property mode remain unchanged.
+
+The transaction starts lazily at the first data query and ends by rollback on
+close. Its **total lifetime**, not a fresh budget per tool call, is the smaller
+of `workflow_timeout_s` and `query_timeout_s` when the latter is set. With
+`query_timeout_s=None`, the workflow bound still applies. Within this mode
+Neo4j's timeout is transaction-scoped. The configured HTTP session idle TTL is
+independent and may be longer: an expired identity workflow must still be
+deleted and replaced with a new session. No transaction is silently reopened.
+The server/next-call lifetime checks are not a hard wall-clock interruption of
+blocked connection acquisition or network I/O.
+
+Before each subsequent tool operation, observed node references are checked
+for continued visibility, including references that contributed to a later
+scalar/count handle. Deletion, workflow expiry or transaction/connection failure
+invalidates the workflow and discards all its handles. Create a new workflow
+explicitly; a node recreated with the same business properties is not a
+replacement for a deleted reference. Invalid arguments alone remain repairable.
+
+This is not snapshot isolation: property and relationship changes can be visible
+between calls, and cached node properties reflect when they were retrieved.
+The check is not an atomic exclusion of concurrent writers. Keep the graph
+read-only externally when stable multi-step results are required. Holding
+transactions and checking references add connection/server cost, including for
+otherwise-local fetches. Public Python workflows are not thread-safe; HTTP
+serializes calls within each session. This experimental mode is not enabled
+in the benchmark runners or the default server. Do not reinterpret historical
+results or resume old runs under changed source code.
+
+The choice of a single transaction follows Neo4j's documented limits on
+[element ID validity](https://neo4j.com/docs/cypher-manual/current/functions/scalar/#functions-elementid).
+Returning serialized payloads does not export reusable internal references;
+clients continue to compose operations through the original server-side handles.
+
+### Public Factory
+
 The public entry points are `connect_neo4j`, `get_tool_specs` and
 `AgentGraphBackend`, imported from `agent_native_graph`. The factory returns
 the existing backend, not a second implementation of graph operations. This
@@ -324,6 +400,50 @@ plain HTTP exposes both bearer credentials. Do not expose it to untrusted
 networks or add workers expecting sessions to be shared. No rate/byte quotas
 or dedicated readiness check have been added in this slice. A successful image
 build and smoke test are not a security audit or production-readiness claim.
+
+## Reproducible Distribution Smoke
+
+With uv and Docker running, from the repository root:
+
+```bash
+make test-distribution
+```
+
+This opt-in check builds the wheel, installs it into a fresh environment outside
+the checkout, and runs a copied client with Python isolated mode (`-I`). It
+also builds the shipped Dockerfile and calls the real HTTP server. No LLM,
+reference repository, Company files or existing Neo4j service is used.
+
+The test creates its own Docker network, a disposable Neo4j container and ANA
+containers for property/transaction modes, with dynamically allocated loopback-only ports and generated demo
+client keys. It seeds 25 multi-label devices, two zones and one deliberately
+unkeyed node. Data includes custom property names, lists, dates and nulls.
+The default-mode traversal fixture has globally unique IDs; its unkeyed fixture
+documents the unsupported traversal. Additional opt-in probes exercise missing
+and duplicate business IDs, nodes with identical properties, changing `id`
+between calls, and deletion followed by recreation. Distinct counting is checked
+with and without an explicit variable on both duplicate-ID and no-ID twins,
+through the installed wheel and the real HTTP service. Legacy and opt-in behavior
+are tested separately, not silently substituted for one another.
+
+Checks cover dynamic schema discovery, native catalog parity, counts,
+projection, 7/7/7/4-row pagination, batched traversal, workflow/session isolation,
+authentication, session deletion/capacity reuse, close on exception and graceful
+container shutdown. Five live tests cover installed-wheel and HTTP paths in
+both identity modes, plus benchmark finalization from the installed wheel and
+inside the shipped image. Finalization checks script model decisions only,
+while executing real count/fetch queries against the disposable graph: bounded
+mode requires an explicit fetch, including after a rejected `done`, and legacy
+fallbacks remain intact. No model endpoint or key is used. The fixture cleans up only its own containers, anonymous
+volumes, network and tagged service image, including after test failures. It
+never clears or reloads a pre-existing graph. A forcibly killed test process
+cannot guarantee cleanup; its temporary resource names begin with `ana-dist-`.
+
+The graph image defaults to `neo4j:2026.05.0`; override it with
+`ANA_TEST_NEO4J_IMAGE=<image>` if needed and report that image with test results.
+Image/package downloads may be necessary. This check is skipped by ordinary
+`make test` and does not certify production security, arbitrary graph shapes,
+multi-worker behavior, quotas or automatic schema refresh.
 
 ## Your Data and Contributions
 

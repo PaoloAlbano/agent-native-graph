@@ -7,6 +7,7 @@ import pytest
 from agent_native_graph.research.docs_comparison import profile
 from agent_native_graph.research.docs_reexecution import load_evaluation
 from agent_native_graph.research.docs_results import read_runs
+from agent_native_graph.research.evaluation_storage import canonical, compact_evaluations
 from agent_native_graph.research_common import result_matches_answer
 
 
@@ -55,6 +56,24 @@ def evidence(tmp_path):
 def test_complete_evidence_is_loaded(evidence):
     report = load_evaluation(*evidence)
     assert len(report["baselines"]["baseline"]["records"]) == 100
+
+
+def test_compact_evidence_has_identical_validated_report(evidence):
+    root, _, _, _ = evidence
+    folder = root / "evaluation"
+    report = json.loads((folder / "manifest.json").read_bytes())
+    for name in ("gold.jsonl", "baseline.jsonl"):
+        payload = b"".join(
+            canonical(json.loads(line)) + b"\n"
+            for line in (folder / name).read_bytes().splitlines()
+        )
+        (folder / name).write_bytes(payload)
+        entry = report["gold"] if name == "gold.jsonl" else report["baselines"]["baseline"]
+        entry["sha256"] = hashlib.sha256(payload).hexdigest()
+    (folder / "manifest.json").write_text(json.dumps(report))
+    before = load_evaluation(*evidence)
+    compact_evaluations(root)
+    assert load_evaluation(*evidence) == before
 
 
 def test_new_run_does_not_invalidate_historical_evaluation(evidence):

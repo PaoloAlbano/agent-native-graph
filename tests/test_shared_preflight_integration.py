@@ -28,7 +28,10 @@ def artifact(graph):
         "version": "shared-preflight-v1",
         "database": "benchmark",
         "graph_sha256": hashlib.sha256(graph.read_bytes()).hexdigest(),
-        "snapshot": {"nodes": {"count": 1, "sha256": "n"}, "edges": {"count": 0, "sha256": "e"}},
+        "snapshot": {
+            "nodes": {"count": 1, "sha256": "a" * 64},
+            "edges": {"count": 0, "sha256": "b" * 64},
+        },
         "schema": schema,
         "schema_sha256": common_preflight.schema_digest(schema),
         "schema_prompt": text,
@@ -133,6 +136,75 @@ def test_ana_shared_mode_saves_evidence_and_uses_live_schema(diagnostic, monkeyp
     assert config["shared_preflight"] == expected
     assert "LOCAL_FILE_MUST_NOT" not in config["shared_preflight"]["schema_prompt"]
     assert "GOLD_DO_NOT_SEND" not in config["shared_preflight"]["schema_prompt"]
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        "stable",
+        "changed",
+        "dump_changed",
+        "post_error",
+        "primary",
+        "primary_and_post",
+        "missing_qid",
+    ],
+)
+def test_ana_block_postcheck_seals_only_complete_unchanged_invocations(
+    diagnostic, monkeypatch, ending
+):
+    import copy
+
+    import neo4j
+
+    from agent_native_graph.research.graph_integrity import (
+        GraphIntegrityError,
+        integrity_path,
+        validate_integrity,
+    )
+
+    _, argv, graph, out = diagnostic
+    expected = artifact(graph)
+    after = copy.deepcopy(expected["snapshot"])
+    if ending == "changed":
+        after["nodes"]["count"] += 1
+    monkeypatch.setattr(sys, "argv", [*argv, "--verify-graph-block"])
+    monkeypatch.setattr(neo4j_benchmark, "_prepare_shared_preflight", lambda args: expected)
+    monkeypatch.setattr(neo4j.GraphDatabase, "driver", MagicMock())
+    scan = MagicMock(return_value=after)
+    if ending in ("post_error", "primary_and_post"):
+        scan.side_effect = RuntimeError("secret-endpoint-must-not-be-published")
+    monkeypatch.setattr(common_preflight, "graph_snapshot", scan)
+
+    def execute(args, tasks, schema):
+        out.write_text("" if ending == "missing_qid" else '{"qid":"q"}\n')
+        if ending == "dump_changed":
+            graph.write_text('{"changed":true}')
+        if ending in ("primary", "primary_and_post"):
+            raise RuntimeError("original benchmark failure")
+
+    monkeypatch.setattr(neo4j_benchmark, "_execute", execute)
+    if ending == "stable":
+        neo4j_benchmark.main()
+        validate_integrity(integrity_path(out), out, configuration=out.with_suffix(".config.json"))
+    elif ending in ("primary", "primary_and_post"):
+        with pytest.raises(RuntimeError, match="original benchmark failure"):
+            neo4j_benchmark.main()
+    else:
+        with pytest.raises(GraphIntegrityError):
+            neo4j_benchmark.main()
+    report = json.loads(integrity_path(out).read_text())
+    assert report["status"] == (
+        "verified"
+        if ending == "stable"
+        else "invalid"
+        if ending in ("changed", "dump_changed")
+        else "incomplete"
+    )
+    assert "secret-endpoint" not in json.dumps(report)
+    scan.assert_called_once()
+    assert scan.call_args.args[1] == "benchmark"
+    assert out.exists()
 
 
 def test_mismatched_graph_prevents_config_or_inference(diagnostic, monkeypatch):

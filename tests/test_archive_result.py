@@ -23,6 +23,8 @@ def test_diagnostic_runs_default_to_local_archive() -> None:
     assert _archive_root(Path("results"), 347) == Path("results")
     assert _archive_root(Path("results"), 100) == Path(".local-results")
     assert _archive_root(Path("custom"), 20) == Path("custom")
+    assert _archive_root(Path("results"), 347, "bounded-v1") == Path(".local-results")
+    assert _archive_root(Path("results").resolve(), 347, "bounded-v1") == Path(".local-results")
 
 
 def test_index_contains_only_full_runs_and_does_not_write_leaderboard(tmp_path: Path) -> None:

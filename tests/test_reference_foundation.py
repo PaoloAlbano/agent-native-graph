@@ -19,6 +19,7 @@ from agent_native_graph.research.read_only import execute_read_only_async
 from agent_native_graph.research.reference_adapters import profile_client
 from agent_native_graph.research.reference_source import reference_source
 from agent_native_graph.research.run_reference_baseline import (
+    _generate_answer,
     _run,
     _score_cypher,
     validate_task_contents,
@@ -182,6 +183,70 @@ def test_structured_baseline_and_native_ana_share_profile_payload(monkeypatch, n
 def test_profile_requires_frozen_source_before_io():
     with pytest.raises(ValueError, match="requires --reference-commit"):
         asyncio.run(_run(SimpleNamespace(profile="temp0-none", reference_commit=None)))
+
+
+@pytest.mark.parametrize(
+    "shared,resume,check", [(False, False, False), (True, True, False), (True, False, True)]
+)
+def test_block_verification_requires_fresh_shared_run_before_io(shared, resume, check):
+    with pytest.raises(ValueError, match="does not support --resume/--check-only"):
+        asyncio.run(
+            _run(
+                SimpleNamespace(
+                    verify_graph_block=True,
+                    shared_preflight=shared,
+                    resume=resume,
+                    check_only=check,
+                )
+            )
+        )
+
+
+@pytest.mark.parametrize("mode", ["single_retrieval", "agentic_retrieval"])
+@pytest.mark.parametrize("profile,pin", [(None, None), (None, "a" * 40), ("temp0-none", None)])
+def test_retrieval_variants_require_profile_and_pin_before_io(mode, profile, pin):
+    with pytest.raises(ValueError, match="Retrieval-only modes require"):
+        asyncio.run(_run(SimpleNamespace(mode=mode, profile=profile, reference_commit=pin)))
+
+
+def test_unknown_reference_mode_is_rejected_before_importing_reference():
+    from agent_native_graph.research.reference_adapters import build_profile_runner
+
+    with pytest.raises(ValueError, match="Unknown reference mode"):
+        build_profile_runner("typo", None, None, None, None)
+
+
+@pytest.mark.parametrize(
+    "mode", ["direct", "single", "agentic", "single_retrieval", "agentic_retrieval"]
+)
+def test_dispatch_passes_only_question_and_schema_not_gold_fields(mode):
+    runner = SimpleNamespace(generate=AsyncMock(), ask=AsyncMock())
+    task = {
+        "qid": "private-qid",
+        "nl_question": "Visible question",
+        "gold_cypher": "HIDDEN_GOLD_SENTINEL",
+        "answer_json": "HIDDEN_ANSWER_SENTINEL",
+    }
+    asyncio.run(_generate_answer(runner, task, "Visible schema", mode))
+    if mode == "direct":
+        runner.generate.assert_awaited_once_with(
+            question="Visible question", schema_text="Visible schema"
+        )
+        runner.ask.assert_not_called()
+    elif mode.startswith("agentic"):
+        runner.ask.assert_awaited_once_with("Visible question", schema_text="Visible schema")
+        runner.generate.assert_not_called()
+    else:
+        runner.ask.assert_awaited_once_with("Visible question", "Visible schema")
+        runner.generate.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", ["single_retrieval", "agentic_retrieval"])
+def test_unvalidated_reference_revision_is_rejected_for_retrieval_variants(mode):
+    with pytest.raises(ValueError, match="validated only against"):
+        asyncio.run(
+            _run(SimpleNamespace(mode=mode, profile="temp0-none", reference_commit="a" * 40))
+        )
 
 
 @pytest.mark.parametrize(

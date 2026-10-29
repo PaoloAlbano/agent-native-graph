@@ -10,6 +10,7 @@ from neo4j import READ_ACCESS, GraphDatabase, Query
 
 from agent_native_graph.research.docs_comparison import git_bytes, key, profile, validate_trace
 from agent_native_graph.research.docs_results import read_runs
+from agent_native_graph.research.evaluation_storage import compact_evaluations
 from agent_native_graph.research.load_simplekg_neo4j import load_simplekg
 from agent_native_graph.research.read_only import execute_read_only as execute_read_only
 from agent_native_graph.research_common import (
@@ -98,6 +99,12 @@ def main():
     parser.add_argument("--reference-repo", type=Path, default=Path("../multigraphrag"))
     parser.add_argument("--graph", type=Path, default=Path("downloads/company_simplekg.json"))
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--storage",
+        choices=("compact", "legacy"),
+        default="compact",
+        help="Seal complete evaluations in shared compact storage, or retain standalone JSONL files.",
+    )
     args = parser.parse_args()
     if args.out.exists():
         raise ValueError(
@@ -265,6 +272,8 @@ def main():
         (args.out / "manifest.json").write_text(
             json.dumps(report, indent=2, ensure_ascii=False) + "\n"
         )
+        if args.storage == "compact":
+            compact_evaluations(args.out.parent, folders=[args.out])
         print(
             json.dumps(
                 {
@@ -279,7 +288,7 @@ def main():
             flush=True,
         )
     except Exception as exc:
-        if report is not None:
+        if report is not None and report.get("status") != "complete":
             report.update(status="failed", error=f"{type(exc).__name__}: {exc}")
             (args.out / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         raise
