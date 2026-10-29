@@ -18,7 +18,7 @@
     return element;
   };
   const run = (side) => state.runs.find((r) => r.config.run_id === $(`run-${side}`).value);
-  const label = (r) => `${r.config.model} · Temperature ${r.config.temperature} · Reasoning ${r.config.reasoning} · ${r.config.created_at.slice(0,19).replace("T", " ")} UTC`;
+  const label = (r) => `${r.config.model} · Temperature ${r.config.temperature} · Reasoning ${r.config.reasoning} · ${r.label}`;
   const outcome = (q) => q.matches_answer_json ? "Correct" : q.ok ? "Answer mismatch" : "Execution not OK";
 
   async function getJSON(path) {
@@ -102,53 +102,7 @@
     if (detailPanel.hidden) { detailPanel.replaceChildren(); document.querySelector(".explorer").append(detailPanel); }
   }
 
-  function handleReferences(value, known) {
-    if (typeof value === "string") return known.has(value) ? [value] : [];
-    if (!value || typeof value !== "object") return [];
-    return [...new Set(Object.values(value).flatMap((v) => handleReferences(v, known)))];
-  }
-
-  function renderTrajectory(record, pane) {
-    const container = node("div");
-    const steps = record.transcript || [];
-    container.append(node("h4", `Tool sequence · ${steps.length} recorded steps`));
-    container.append(node("p", "Handles link to recorded tool responses, not live server state. Previews may be partial. Model reasoning or message text is shown only if actually present in the record.", "small-text"));
-    const handles = new Map();
-    const sequence = node("ol", undefined, "recorded-sequence");
-    steps.forEach((step, index) => {
-      const item = node("li");
-      const action = step.action || {};
-      item.append(node("h5", `${index + 1}. ${action.tool || "Recorded event"}`));
-      const refs = handleReferences(action.args, handles);
-      if (refs.length) {
-        const flow = node("div", "Input handles: ", "handle-flow");
-        for (const handle of refs) {
-          const button = node("button", handle, "handle-link");
-          const target = handles.get(handle);
-          button.addEventListener("click", () => {
-            target.open = true;
-            target.scrollIntoView({ behavior: "smooth", block: "center" });
-            target.querySelector("summary").focus();
-          });
-          flow.append(button);
-        }
-        item.append(flow);
-      }
-      item.append(disclosure("Arguments", action.args ?? {}));
-      const result = disclosure("Recorded response", step.result ?? step);
-      if (step.result?.handle) {
-        result.id = `${pane}-step-${index}`;
-        result.querySelector("summary").textContent = `Output ${step.result.handle} · recorded response`;
-        handles.set(step.result.handle, result);
-      }
-      item.append(result);
-      const extra = Object.fromEntries(Object.entries(step).filter(([key]) => !["action", "result"].includes(key)));
-      if (Object.keys(extra).length) item.append(disclosure("Other recorded event fields", extra));
-      sequence.append(item);
-    });
-    container.append(sequence);
-    return container;
-  }
+  const renderTrajectory = (record, pane) => ANAResultsUI.createTrajectory(document, record, pane);
 
   function renderRun(record, selectedRun, side, path) {
     const pane = node("article", undefined, "run-detail");
@@ -191,6 +145,7 @@
       const panes = node("div", undefined, selected.length > 1 ? "run-panes comparing" : "run-panes");
       details.forEach((detail, i) => panes.append(renderRun(detail.record, selected[i], i === 0 ? "a" : "b", detail.path)));
       $("question-detail").replaceChildren(heading, qid, gold, expected, panes);
+      ANAResultsUI.focusQuestion(detailPanel);
     } catch (error) {
       if (generation !== state.generation) return;
       const retry = node("button", "Retry loading this question");

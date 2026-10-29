@@ -13,7 +13,7 @@ from typing import Any
 from agent_native_graph.core.tool_specs import _tool_specs
 from agent_native_graph.core.tooling import registered_tools
 from agent_native_graph.research.docs_comparison import publish_comparison
-from agent_native_graph.research.docs_results import publish_results
+from agent_native_graph.research.docs_results import publish_results, run_label
 
 REPOSITORY_URL = "https://github.com/PaoloAlbano/agent-native-graph"
 GROUPS = (
@@ -356,7 +356,7 @@ def render_example(example: dict[str, Any]) -> str:
         f'<p class="example-question">“{escape(record["nl_question"])}”</p>'
         '<div class="example-provenance">'
         f"<span>{escape(run['model'])}</span><span>Temperature {run['temperature']:g}</span>"
-        f"<span>Reasoning: {escape(run['reasoning'])}</span><span>{escape(run['created_at'][:10])}</span></div>"
+        f"<span>Reasoning: {escape(run['reasoning'])}</span><span>{run_label(run['run_id'])}</span></div>"
         "<p>These are actual calls and responses from a Company benchmark run. "
         'Click a handle such as <a class="handle-link" href="#example-handle-h1">h1</a> '
         "to inspect its recorded preview and metadata.</p>"

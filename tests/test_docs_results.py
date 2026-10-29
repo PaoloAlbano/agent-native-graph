@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from agent_native_graph.research.docs_results import (
     evidence_summary,
     publish_results,
     read_runs,
+    run_label,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,6 +117,29 @@ def test_evidence_summary_retains_repeats_and_escapes_model_names():
     assert "&lt;model&gt;" in html and "<model>" not in html
     assert "neither confidence intervals nor averages" in html
     assert "shared-preflight diagnostics" in html
+
+
+def test_run_navigation_uses_stable_labels_without_dates(tmp_path):
+    first, _ = archive(tmp_path, run_id="2026-10-26-first")
+    second, _ = archive(tmp_path, run_id="2026-10-27-second")
+    sources = tmp_path / "docs/site"
+    sources.mkdir(parents=True)
+    for name in ("results.template.html", "run-explorer.html"):
+        (sources / name).write_text((ROOT / "docs/site" / name).read_text())
+    output = tmp_path / "site"
+    page = publish_results(tmp_path, output, "https://example.com/repo")
+    index = json.loads((output / "data/results/index.json").read_text())
+    assert len({run["label"] for run in index["runs"]}) == 2
+    for folder in (first, second):
+        label = run_label(folder.name)
+        assert label in page
+        assert run_label(folder.name) == label
+    for generated in output.glob("*.html"):
+        text = re.sub(r"<[^>]+>", "", generated.read_text())
+        assert "2026-10-26" not in text and "2026-10-27" not in text
+        assert "Temperature 0" in text and "Reasoning none" in text
+    assert all(run["config"]["created_at"] == "2026-10-26" for run in index["runs"])
+    assert {run["config"]["run_id"] for run in index["runs"]} == {first.name, second.name}
 
 
 def test_standard_run_config_is_validated(tmp_path):

@@ -105,6 +105,11 @@ def write_json(path: Path, data: Any) -> None:
     )
 
 
+def run_label(run_id: str) -> str:
+    """Identify an observation without exposing launch dates or changing archive IDs."""
+    return f"Run {hashlib.sha256(run_id.encode()).hexdigest()[:8]}"
+
+
 def render_page(
     template: str,
     *,
@@ -199,6 +204,7 @@ def publish_results(root: Path, output: Path, repository_url: str) -> str:
         run_page = f"run-{key}.html"
         question_index = f"data/results/{key}/index.json"
         entry = {
+            "label": run_label(run_id),
             "config": {k: manifest[k] for k in PUBLIC_CONFIG if k in manifest},
             "summary": summary,
             "source": source,
@@ -209,14 +215,14 @@ def publish_results(root: Path, output: Path, repository_url: str) -> str:
         write_json(output / question_index, entry | {"questions": questions})
         label = (
             f"{manifest['model']} · Temperature {manifest['temperature']:g} · "
-            f"Reasoning {manifest['reasoning']} · {manifest['created_at'][:19]}"
+            f"Reasoning {manifest['reasoning']} · {run_label(run_id)}"
         )
         model = manifest["model"]
         model_page = f"model-{hashlib.sha256(model.encode()).hexdigest()[:16]}.html"
         row = (
             f'<tr><th scope="row"><a href="{run_page}">{escape(label)}</a>'
             '<br><span class="small-text">Explore all 347 questions</span>'
-            f"<details><summary>Run ID</summary><code>{escape(run_id)}</code></details></th>"
+            f'<br><a href="{source}">Source archive</a></th>'
             f"<td>{manifest['temperature']:g}</td><td>{escape(manifest['reasoning'])}</td>"
             f"<td>{summary['matches']}/347 <strong>({summary['matches'] / 347:.1%})</strong></td>"
             f"<td>{summary['ok']}/347</td><td>{347 - summary['ok']}</td>"
@@ -227,7 +233,7 @@ def publish_results(root: Path, output: Path, repository_url: str) -> str:
             '<p><a href="results.html">All models</a> / '
             f'<a href="{model_page}">{escape(model)}</a> / This run</p>'
             f'<p class="run-label">Temperature {manifest["temperature"]:g} · '
-            f"Reasoning {escape(manifest['reasoning'])} · {escape(manifest['created_at'])}</p>"
+            f"Reasoning {escape(manifest['reasoning'])} · {run_label(run_id)}</p>"
         )
         (output / run_page).write_text(
             render_page(
@@ -249,7 +255,7 @@ def publish_results(root: Path, output: Path, repository_url: str) -> str:
             "<li>"
             f"Temperature {run['manifest']['temperature']:g} · "
             f"Reasoning {escape(run['manifest']['reasoning'])} · "
-            f"{escape(run['manifest']['created_at'][:19])}</li>"
+            f"{run_label(run['manifest']['run_id'])}</li>"
             for run in runs
             if run["manifest"]["model"] == model
         )

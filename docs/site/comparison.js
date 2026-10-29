@@ -20,16 +20,19 @@
       const header = node("div");
       header.append(detail("Golden Cypher", ana.gold_cypher), detail("Expected benchmark rows", ana.expected));
       if (config.gold_reproduced === false) header.prepend(node("p", "The golden query did not reproduce the expected rows. This question remains included in the 100-case scores; the discrepancy is pending investigation."));
-      const pane = node("article"); pane.className = "run-detail";
-      pane.append(node("h2", "ANA · exact answer matching"), node("p", ana.matches_answer_json ? "Match" : "No match"), node("p", `${ana.llm_call_count} LLM calls · ${ana.tool_call_count} tool calls (runner counters)`), detail("Returned rows", ana.rows), detail("Configuration", config.ana.config));
-      (ana.transcript || []).forEach((step, i) => {
-        pane.append(node("h3", `${i + 1}. ${step.action?.tool || "Recorded event"}`), detail("Arguments", step.action?.args), detail("Tool response", step.result));
-      });
-      pane.append(link("Open full ANA run analysis", config.ana.page), node("p", "Raw model request/response text is unavailable in these ANA archives; it is not reconstructed."), download(config.ana.detail));
-      root.replaceChildren(header, pane);
+      const navigation = node("nav"); navigation.className = "comparison-nav";
+      navigation.setAttribute("aria-label", "Approaches for this question");
+      navigation.append(link("ANA flow", "#ana-flow"), link("Direct Cypher", "#direct-cypher"), link("Multi-agent", "#multi-agent"));
+      const pane = node("article"); pane.className = "run-detail"; pane.id = "ana-flow";
+      pane.append(node("h2", "ANA · recorded execution"), node("p", ANAResultsUI.outcome(ana)), node("p", `${ana.llm_call_count} LLM calls · ${ana.tool_call_count} tool calls · ${ana.tool_error_count ?? "Not recorded"} tool errors (runner counters)`));
+      pane.append(ANAResultsUI.createTrajectory(document, ana, "comparison-ana"));
+      pane.append(detail("Final returned rows", ana.rows), detail("Configuration & provenance", config.ana.config));
+      pane.append(link("Open this question in the full ANA run", config.ana.page), node("p", "Raw model request/response text is unavailable in these ANA archives; it is not reconstructed."), download(config.ana.detail));
+      root.replaceChildren(navigation, header, pane);
       for (const [mode, reference] of Object.entries(config.external)) {
         const data = await read(reference.detail);
         const section = node("article"); section.className = "run-detail";
+        section.id = mode === "single" ? "direct-cypher" : "multi-agent";
         const logs = data.logs["calls.jsonl"] || [];
         if (data.execution) {
           section.append(node("h2", mode === "single" ? "Direct Cypher · re-executed query" : "Multi-agent · re-executed query"), node("p", data.execution.matches_answer_json ? "Exact benchmark match" : "No exact benchmark match"), detail("Re-executed returned rows", data.execution.rows), detail("Re-execution details and errors", data.execution));

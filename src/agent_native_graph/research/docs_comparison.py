@@ -9,7 +9,7 @@ from html import escape
 from pathlib import Path
 
 from agent_native_graph.research.docs_reexecution import load_evaluation
-from agent_native_graph.research.docs_results import read_runs, write_json
+from agent_native_graph.research.docs_results import read_runs, run_label, write_json
 
 
 def key(value: str) -> str:
@@ -204,7 +204,7 @@ def publish_comparison(root: Path, output: Path, reference_repo: Path | None) ->
         }
         if not all(matching.values()):
             unavailable.append(
-                f'<li><a href="run-{run_key}.html">{escape(manifest["run_id"])}</a>: matching baseline pair not available.</li>'
+                f'<li><a href="run-{run_key}.html">{escape(manifest["model"])} · {run_label(manifest["run_id"])}</a>: matching baseline pair not available.</li>'
             )
             continue
         has_execution = bool(
@@ -214,7 +214,7 @@ def publish_comparison(root: Path, output: Path, reference_repo: Path | None) ->
         )
         records = {r["qid"]: r for r in ana["records"]}
         score = sum(records[qid]["matches_answer_json"] for qid in qids)
-        title = f"{manifest['model']} · Temperature {manifest['temperature']:g} · Reasoning {manifest['reasoning']} · {manifest['created_at'][:10]}"
+        title = f"{manifest['model']} · Temperature {manifest['temperature']:g} · Reasoning {manifest['reasoning']} · {run_label(manifest['run_id'])}"
         profile_page = f"comparison-{run_key}.html"
         overview.append(
             f'<tr><th><a href="{profile_page}">{escape(title)}</a></th><td>{score}/100</td><td>{matching["single"]["correct"]}/100</td><td>{matching["agentic"]["correct"]}/100</td></tr>'
@@ -290,7 +290,7 @@ def publish_comparison(root: Path, output: Path, reference_repo: Path | None) ->
         configs = {
             "ANA": {
                 k: manifest.get(k)
-                for k in ("run_id", "max_tokens", "max_steps", "concurrency", "graph_sha256")
+                for k in ("max_tokens", "max_steps", "concurrency", "graph_sha256")
             },
             **{
                 m: {
@@ -307,6 +307,7 @@ def publish_comparison(root: Path, output: Path, reference_repo: Path | None) ->
                 for m, b in matching.items()
             },
         }
+        configs["ANA"]["run"] = run_label(manifest["run_id"])
         content = (
             '<p><a href="comparison.html">← All comparisons</a></p><h2>Configuration differences</h2><pre>'
             + escape(json.dumps(configs, indent=2))
