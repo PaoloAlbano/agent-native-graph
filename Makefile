@@ -40,6 +40,7 @@ DOCS_PORT ?= 8000
 DOCS_OUT ?= build/site
 DOCS_PUBLIC_URL ?= https://paoloalbano.github.io/agent-native-graph/
 PROFILE ?= temp0-none
+SHARED_PREFLIGHT ?= 0
 PROVIDER_TAG ?= openai-compatible
 CHECK_ONLY ?= 0
 
@@ -141,6 +142,7 @@ benchmark:
 	  --tasks "$(TASKS)" \
 	  --schema-json "$(SCHEMA_JSON)" \
 	  --graph-file "$(GRAPH)" --run-dir "$(RUN_DIR)" \
+	  $(if $(filter 1,$(SHARED_PREFLIGHT)),--shared-preflight --database "$(or $(NEO4J_DATABASE),neo4j)",) \
 	  $(if $(OUT),--out "$(OUT)",) \
 	  --limit "$(LIMIT)" \
 	  --concurrency "$(CONCURRENCY)" \
@@ -165,6 +167,7 @@ baseline-check:
 	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
 	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
 	  --out "$(BASELINE_OUT)" --check-only \
+	  $(if $(filter 1,$(SHARED_PREFLIGHT)),--shared-preflight,) \
 	  --neo4j-uri "$(NEO4J_URI)" --neo4j-user "$(NEO4J_USER)" \
 	  --neo4j-password "$(NEO4J_PASSWORD)" --database "$(or $(NEO4J_DATABASE),neo4j)" \
 	  $(if $(BASELINE_PROFILE),--profile "$(BASELINE_PROFILE)",) \
@@ -174,6 +177,7 @@ baseline-run:
 	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
 	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
 	  --out "$(BASELINE_OUT)" --model "$(MODEL)" --base-url "$(BASE_URL)" \
+	  $(if $(filter 1,$(SHARED_PREFLIGHT)),--shared-preflight,) \
 	  --api-key-file "$(API_KEY_FILE)" --neo4j-uri "$(NEO4J_URI)" \
 	  --neo4j-user "$(NEO4J_USER)" --neo4j-password "$(NEO4J_PASSWORD)" \
 	  --database "$(or $(NEO4J_DATABASE),neo4j)" \

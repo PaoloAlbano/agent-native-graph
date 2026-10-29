@@ -220,17 +220,21 @@ def test_real_graph_adapter_caps_preview_not_complete_execution():
 
 
 @pytest.mark.parametrize(
-    "mode,termination",
+    "mode,termination,shared",
     [
-        ("direct", "success"),
-        ("single", "success"),
-        ("agentic", "success"),
-        ("direct", "timeout"),
-        ("direct", "cancel"),
+        ("direct", "success", False),
+        ("single", "success", False),
+        ("agentic", "success", False),
+        ("direct", "timeout", False),
+        ("direct", "cancel", False),
+        ("direct", "success", True),
+        ("single", "success", True),
+        ("agentic", "success", True),
+        ("direct", "mismatch", True),
     ],
 )
 def test_harness_records_pinned_profile_run_without_network(
-    tmp_path, monkeypatch, mode, termination
+    tmp_path, monkeypatch, mode, termination, shared
 ):
     """Exercise import lifetime, task checks, runner selection and on-disk provenance."""
     root = Path(__file__).resolve().parents[1]
@@ -259,6 +263,29 @@ def test_harness_records_pinned_profile_run_without_network(
         ],
     )
     args = run_reference_baseline._parse_args()
+    args.shared_preflight = shared
+    canonical = {
+        "labels": ["Asset"],
+        "relationship_types": [],
+        "node_properties": [],
+        "relationship_properties": [],
+        "label_relationships": [],
+    }
+    bootstrap = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    evidence = {
+        "version": "shared-preflight-v1",
+        "database": "neo4j",
+        "schema": canonical,
+        "schema_prompt": bootstrap,
+        "schema_sha256": "shared-hash",
+        "schema_prompt_sha256": "shared-hash",
+        "snapshot": {"nodes": {"count": 1, "sha256": "n"}, "edges": {"count": 0, "sha256": "e"}},
+        "graph_sha256": "fixture-sha256",
+    }
+    prepare = AsyncMock(return_value=evidence)
+    if termination == "mismatch":
+        prepare.side_effect = ValueError("Graph content mismatch")
+    monkeypatch.setattr(run_reference_baseline, "_prepare_shared_preflight", prepare)
     if termination == "timeout":
         args.task_timeout = 0.05
     # File identities and final scoring have separate tests; no large dump or DB IO here.
@@ -296,6 +323,7 @@ def test_harness_records_pinned_profile_run_without_network(
         "InterpretedAnswer": {"answer": "1"},
     }
     client_type = httpx.AsyncClient
+    payloads = []
 
     started, stopped = asyncio.Event(), asyncio.Event()
 
@@ -307,6 +335,7 @@ def test_harness_records_pinned_profile_run_without_network(
             finally:
                 stopped.set()
         payload = json.loads(request.content)
+        payloads.append(payload)
         response = responses[payload["response_format"]["json_schema"]["name"]]
         return httpx.Response(
             200,
@@ -326,7 +355,10 @@ def test_harness_records_pinned_profile_run_without_network(
 
     async def execute():
         run = asyncio.create_task(run_reference_baseline._run(args))
-        if termination == "cancel":
+        if termination == "mismatch":
+            with pytest.raises(ValueError, match="Graph content mismatch"):
+                await run
+        elif termination == "cancel":
             await asyncio.wait_for(started.wait(), 2)
             run.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -335,6 +367,10 @@ def test_harness_records_pinned_profile_run_without_network(
             await run
 
     asyncio.run(execute())
+    if termination == "mismatch":
+        assert not output.exists() and not output.with_suffix(".meta.json").exists()
+        assert not payloads
+        return
     metadata = json.loads(output.with_suffix(".meta.json").read_text())
     row = json.loads(output.read_text())
     if termination != "success":
@@ -347,6 +383,16 @@ def test_harness_records_pinned_profile_run_without_network(
     assert metadata["source_mode"] == "pinned-git-export"
     assert metadata["transport"] == "ana-shared-provider"
     assert metadata["llm_settings"]["max_tokens"] == 16000
+    if shared:
+        assert metadata["shared_preflight"] == evidence
+        assert metadata["schema_strategy"] == "shared-canonical-v1"
+        generator = next(
+            p for p in payloads if p["response_format"]["json_schema"]["name"] == "QueryGeneration"
+        )
+        assert bootstrap in generator["messages"][-1]["content"]
+        run_reference_baseline._complete_schema.assert_not_called()
+    else:
+        assert "shared_preflight" not in metadata
     assert metadata["execution_policy"] == "read-only-v1"
     assert row["ok"] and row["llm_call_count"] == {"direct": 1, "single": 2, "agentic": 3}[mode]
     accounting = row["request_accounting"]["summary"]

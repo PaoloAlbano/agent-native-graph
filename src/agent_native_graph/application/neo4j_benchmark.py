@@ -56,6 +56,14 @@ def main() -> None:
     parser.add_argument("--tasks", type=Path, required=True)
     parser.add_argument("--schema-json", type=Path, required=True)
     parser.add_argument(
+        "--shared-preflight",
+        action="store_true",
+        help="Verify the full graph and use the canonical live schema shared with baselines; new treatment",
+    )
+    parser.add_argument(
+        "--database", help="Explicit database for --shared-preflight; defaults to neo4j"
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         help="Existing path only with --resume; otherwise generated automatically",
@@ -125,6 +133,12 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
+    if args.database is not None and not args.shared_preflight:
+        parser.error(
+            "--database requires --shared-preflight; legacy database behavior is unchanged"
+        )
+    if args.shared_preflight and args.check_only:
+        parser.error("--shared-preflight needs live graph verification; omit --check-only")
     apply_profile(args)
     if args.concurrency < 1:
         parser.error("--concurrency must be positive")
@@ -139,6 +153,9 @@ def main() -> None:
             raise ValueError("Output already exists; choose a new path or use --resume")
         tasks = limited_tasks(read_jsonl(args.tasks), args.limit)
         schema = json.loads(args.schema_json.read_text(encoding="utf-8"))
+        if args.shared_preflight:
+            args.shared_preflight_artifact = _prepare_shared_preflight(args)
+            schema = args.shared_preflight_artifact["schema"]
         save_config(args, tasks, Path.cwd())
         if args.resume and args.out.exists():
             previous = read_jsonl(args.out)
@@ -151,9 +168,21 @@ def main() -> None:
         if args.check_only:
             print(json.dumps({"checked": str(args.out), "inference_started": False}))
             return
-        if args.profile:
+        if args.profile and not args.shared_preflight:
             _verify_graph(args)
         _execute(args, tasks, schema)
+
+
+def _prepare_shared_preflight(args):
+    """Opt-in only: the same verified graph and canonical schema as the baselines."""
+    from neo4j import GraphDatabase
+
+    from agent_native_graph.research.common_preflight import prepare_preflight
+
+    with GraphDatabase.driver(
+        args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+    ) as driver:
+        return prepare_preflight(driver, args.database or "neo4j", args.graph_file)
 
 
 def _verify_graph(args) -> None:
@@ -211,6 +240,9 @@ def _execute(args, tasks: list[dict], schema: dict) -> None:
         "enable_runner_guardrails": args.enable_runner_guardrails,
         "task_timeout_s": args.task_timeout_s,
     }
+    shared = getattr(args, "shared_preflight_artifact", None)
+    if shared is not None:
+        common_kwargs.update(schema_bootstrap=shared["schema_prompt"], database=shared["database"])
     if args.concurrency <= 1:
         for task in pending_tasks:
             row = _run_agent_task(task, **common_kwargs)
@@ -250,6 +282,8 @@ def _run_agent_task(
     evaluation_fetch_all_pages: bool,
     enable_runner_guardrails: bool,
     task_timeout_s: int | None,
+    schema_bootstrap: str | None = None,
+    database: str | None = None,
 ) -> dict[str, Any]:
     from agent_native_graph.backends.neo4j.backend import Neo4jGraphBackend
 
@@ -262,6 +296,7 @@ def _run_agent_task(
         schema,
         query_timeout_s=neo4j_query_timeout_s,
         schema_entry=schema_entry,
+        **({"database": database} if database is not None else {}),
     )
     started = time.perf_counter()
     transcript: list[dict[str, Any]] = []
@@ -287,6 +322,9 @@ def _run_agent_task(
                 account_requests(accounting, role="agent"),
                 deadline_scope(deadline if task_timeout_s is not None else None),
             ):
+                bootstrap_options = (
+                    {"schema_bootstrap": schema_bootstrap} if schema_bootstrap is not None else {}
+                )
                 action = _next_action(
                     llm,
                     task["nl_question"],
@@ -296,6 +334,7 @@ def _run_agent_task(
                     enable_planning_tools=enable_planning_tools,
                     schema_entry=schema_entry,
                     enable_runner_guardrails=enable_runner_guardrails,
+                    **bootstrap_options,
                 )
             deadline.remaining()
             llm_meta = action.pop("_llm_meta", None)

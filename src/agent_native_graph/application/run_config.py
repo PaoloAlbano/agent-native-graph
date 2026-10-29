@@ -268,6 +268,12 @@ def save_config(args, tasks: list[dict], root: Path) -> dict:
         ),
         "identity": execution_identity(args, root),
     }
+    shared = getattr(args, "shared_preflight_artifact", None)
+    if shared is not None:
+        if shared["graph_sha256"] != inputs["graph"]["sha256"]:
+            raise ValueError("Graph input changed after shared preflight; no inference started")
+        config["schema_source"] = "shared-live-preflight-v1"
+        config["shared_preflight"] = shared
     config["configuration_sha256"] = digest(config)
     if previous:
         # A docs-only commit is harmless if executable sources and treatment match.
