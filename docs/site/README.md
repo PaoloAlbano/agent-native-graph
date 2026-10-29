@@ -66,7 +66,12 @@ question tables or JSON fetches. Ordinary links navigate between pages.
 Only run pages load the explorer, with filters, tool traces and optional
 per-question comparisons with another run.
 Question URLs retain run selections and QID so individual analyses can be shared.
-Run labels explicitly include temperature and reasoning. The explorer displays
+Run labels explicitly include temperature and reasoning. The results index has
+an overview generated from all validated archives, with a per-model observed
+score range and retained run count; ranges are not pooled means or confidence
+intervals. Historical generations and shared-preflight smoke diagnostics remain
+separate. The overview requires no additional client-side data download.
+The explorer displays
 all 347 questions in a full-width table, with QID-only search and outcome filters.
 Inspecting a row expands a single question inline, rather than using a narrow
 scrolling sidebar. Closed JSON disclosures do not serialize or mount their

@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlsplit
 import pytest
 
 from agent_native_graph import get_tool_specs
-from agent_native_graph.research.docs_comparison import profile
+from agent_native_graph.research.docs_comparison import git_bytes, profile
 
 ROOT = Path(__file__).resolve().parents[1]
 PAPER = ROOT / "paper"
@@ -48,17 +48,22 @@ def observations():
         folder = manifest_path.parent
         assert label not in entries
         entries[label] = {
+            "folder": folder,
             "table": row,
             "manifest": manifest,
             "summary": json.loads((folder / "summary.json").read_text()),
             "records": [json.loads(line) for line in (folder / "run.jsonl").open() if line.strip()],
         }
-    assert len(entries) == 9
+    assert len(entries) == 13  # This paper snapshot need not grow with every future contribution.
     return entries
 
 
 def test_full_split_table_matches_each_linked_observation(observations):
-    aliases = {"GPT-OSS-120B": "openai/gpt-oss-120b", "Qwen3.5-27B": "Qwen/Qwen3.5-27B"}
+    aliases = {
+        "GPT-OSS-120B": "openai/gpt-oss-120b",
+        "GPT-OSS-20B": "openai/gpt-oss-20b",
+        "Qwen3.5-27B": "Qwen/Qwen3.5-27B",
+    }
     for entry in observations.values():
         row, manifest, summary = entry["table"], entry["manifest"], entry["summary"]
         assert aliases[row[1]] == manifest["model"]
@@ -97,6 +102,8 @@ def test_shared_question_table_uses_the_linked_common_evaluator(observations, ev
 def test_qwen_error_table_separates_terminal_failures_from_recovered_timeouts(observations):
     text = (PAPER / "08-error-analysis.md").read_text()
     for row in table_rows(text):
+        if row[0] == "Observation":
+            continue
         records = observations[row[0]]["records"]
         exhausted = sum(
             not r["ok"] and r["failure_class"] == "no_final_fetch_or_max_steps" for r in records
@@ -116,6 +123,59 @@ def test_qwen_error_table_separates_terminal_failures_from_recovered_timeouts(ob
             str(len(timed_out)),
             str(sum(r["matches_answer_json"] for r in timed_out)),
         ]
+
+
+def test_gptoss20_request_table_uses_same_pinned_subset(observations):
+    text = (ROOT / "docs/multigraphrag-comparison.md").read_text()
+    section = text.split("### GPT-OSS-20B Request Observability", 1)[1]
+    pinned = json.loads((ROOT / "data/reference_company100_qids.json").read_text())
+    qids = set(pinned["qids"])
+    by_profile = {
+        f"T{int(e['manifest']['temperature'])}/{e['manifest']['reasoning']}": e
+        for e in observations.values()
+        if e["manifest"]["model"] == "openai/gpt-oss-20b"
+    }
+    for row in table_rows(section):
+        entry = by_profile[row[0]]
+        records = [r for r in entry["records"] if r["qid"] in qids]
+        assert len(records) == 100
+        assert row[1:3] == [
+            f"{sum(r[key] for r in records) / 100:.2f}"
+            for key in ("llm_call_count", "tool_call_count")
+        ]
+        assert row[5] == str(
+            sum(
+                r["request_accounting"]["summary"]["observed_usage_totals"]["total_tokens"]
+                for r in records
+            )
+        )
+
+
+@pytest.mark.skipif(
+    not (ROOT.parent / "multigraphrag/.git").exists(),
+    reason="Pinned external call logs require the optional sibling checkout",
+)
+def test_gptoss20_logged_calls_match_pinned_source():
+    text = (ROOT / "docs/multigraphrag-comparison.md").read_text()
+    section = text.split("### GPT-OSS-20B Request Observability", 1)[1]
+    source = json.loads((ROOT / "docs/site/comparison-source.json").read_text())
+    qids = set(json.loads((ROOT / "data/reference_company100_qids.json").read_text())["qids"])
+    for row in table_rows(section):
+        temperature, reasoning = row[0][1:].split("/")
+        setting = (
+            f"temp{float(temperature):.1f}-reasoning-{'off' if reasoning == 'none' else 'medium'}"
+        )
+        for column, mode in ((3, "single"), (4, "agentic")):
+            path = f"results/openai--gpt-oss-20b/{setting}/company/{mode}/calls.jsonl"
+            payload = git_bytes(ROOT.parent / "multigraphrag", "show", f"{source['commit']}:{path}")
+            calls = [
+                call
+                for call in map(json.loads, payload.splitlines())
+                if call.get("qid") in qids
+                and call.get("domain") == "company"
+                and call.get("mode") == mode
+            ]
+            assert row[column] == f"{len(calls) / 100:.2f}"
 
 
 def test_paper_catalog_uses_actual_default_tool_names():

@@ -229,6 +229,16 @@ does not certify after-run state or the entire controlled protocol. Keep the gra
 read-only externally. The schema bootstrap can be large; this research mode does
 not replace the bounded discovery tools used by ordinary library/server clients.
 
+For a small diagnostic ANA run, use the direct `benchmark-neo4j` CLI without
+`--profile`: official ANA profiles intentionally require all 347 cases. Pass
+`--limit 3 --native-tools --tool-choice auto --temperature 0 --max-tokens 16000
+--max-steps 12 --evaluation-fetch-all-pages --shared-preflight --database neo4j`
+along with the usual task/schema/graph, model and output arguments. Store smoke
+outputs outside `results/`. The baseline CLI can combine `--limit 3`, its pinned
+`--profile` and `--shared-preflight`. Compare the two saved `shared_preflight`
+objects, including schema/prompt hashes and graph snapshots; they must match.
+Such diagnostics do not estimate quality or validate the full controlled protocol.
+
 ### Request Accounting
 
 New ANA runs and profile-enabled reference baselines save `request_accounting`

@@ -27,7 +27,7 @@ commit `72fe7105310c85ebe6b1b3b7d4c6152ddb206393` on branch `llm_calls_recap`:
 
 ## Benchmark Protocol
 
-Full-split analysis retains all 347 questions in each of nine ANA runs. The
+Full-split analysis retains all 347 questions in each of thirteen ANA runs. The
 external comparison uses exactly the 100 QIDs pinned from the reference Company
 trace in [reference_company100_qids.json](../data/reference_company100_qids.json).
 This set differs from the first 100 local tasks by one question; a numerical
@@ -40,7 +40,7 @@ only read queries are executed, with a 30-second transaction timeout, rollback
 and a 100,000-row cap. Missing queries, query errors and exceeded caps count as
 failures, never partial successes. The graph is fingerprinted against the dump
 before evaluation and again afterwards. The selected complete evaluation
-contains 100 golden queries and 1,600 baseline-query attempts, plus re-scoring
+contains 100 golden queries and 2,400 baseline-query attempts, plus re-scoring
 of ANA's already saved rows. No LLM call is made during this evaluation.
 
 ## Baseline Implementations
@@ -93,8 +93,8 @@ and [metric details](../docs/multigraphrag-comparison.md) identify the cases.
 
 ## Default Run Settings
 
-Two model identifiers are observed: `openai/gpt-oss-120b` and
-`Qwen/Qwen3.5-27B`. Four YAML profiles cross temperature 0/1 with requested
+Three model identifiers are observed: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`
+and `Qwen/Qwen3.5-27B`. Four YAML profiles cross temperature 0/1 with requested
 thinking off/medium. Native tools, `tool_choice=auto`, 16,000 output tokens per
 call and 12 agent steps are used; temperature 0 is not a determinism guarantee.
 The standard profiles use a 60-second HTTP timeout, at most three outer transport
@@ -102,10 +102,12 @@ attempts and a 30-second wait before rate-limit retries. Medium-thinking length
 responses permit a low-effort retry, whose use is recorded. Requested thinking
 does not prove what a serving backend executed internally.
 
-The five October 27-28 runs have sanitized launch `run-config.json` files with
+The nine October 27-29 runs have sanitized launch `run-config.json` files with
 input, source-tree, prompt, tool and profile hashes. They use concurrency 3;
 their source-tree identities need not match across different launch dates.
-The three new Qwen identities match each other. The four older runs have less
+The three new Qwen identities match each other, as do all four GPT-OSS-20B
+identities. The GPT-OSS-20B files also include settled request accounting.
+The four older runs have less
 complete provenance and concurrency 2-5. A declared Git commit does not identify
 uncommitted launch code; missing historical fields are not reconstructed.
 Provider/model revision, runtime effects and some generation conditions cannot
@@ -117,6 +119,14 @@ commands and full artifact paths. The current demo HTTP authentication/session
 layer is not in the measured benchmark path, which calls the backend directly.
 
 ## Prospective Matched-Condition Study
+
+The historical tables do not use the new opt-in shared-preflight treatment.
+A separate three-question live diagnostic verified identical graph fingerprints
+and canonical schema evidence for ANA and the reference `single` runner. It
+checks integration only; no diagnostic score enters the reported 347/100 tables.
+The read-only graph check does not freeze concurrent writers or certify the
+complete matched-condition protocol. Its mechanics are documented in
+[reproduction](../docs/reproduction.md#opt-in-common-graph-and-schema-preflight).
 
 The [controlled Company design](../docs/controlled-company-protocol.md) specifies
 a future matched-condition study, not additional results. It proposes shared

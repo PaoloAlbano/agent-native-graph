@@ -6,12 +6,12 @@ not a comparison with Multi-Agent GraphRAG. That comparison has a separate
 
 ## Evidence
 
-The nine retained complete ANA runs are under
+The thirteen retained complete ANA runs are under
 [`results/cypherbench-company/full/runs/`](../results/cypherbench-company/full/runs/).
 Each run has a manifest, all 347 per-question records, a summary, and the
 non-matching cases. [`index.json`](../results/cypherbench-company/index.json)
 lists their model, profile, and score. All have task, graph, and run hashes;
-the five October 27-28 runs also include sanitized `run-config.json` provenance.
+the nine October 27-29 runs also include sanitized `run-config.json` provenance.
 They are individual observations; concurrency differs between the two historical
 GPT-OSS temperature-0, reasoning-off runs.
 
@@ -26,6 +26,10 @@ GPT-OSS temperature-0, reasoning-off runs.
 | Qwen3.5-27B | temp 0, medium reasoning | Oct 28 | 290/347 | 344/347 |
 | Qwen3.5-27B | temp 1, no reasoning | Oct 28 | 273/347 | 337/347 |
 | Qwen3.5-27B | temp 1, medium reasoning | Oct 28 | 292/347 | 342/347 |
+| GPT-OSS-20B | temp 0, no reasoning | Oct 28 | 217/347 | 311/347 |
+| GPT-OSS-20B | temp 0, medium reasoning | Oct 28 | 222/347 | 314/347 |
+| GPT-OSS-20B | temp 1, no reasoning | Oct 28 | 229/347 | 311/347 |
+| GPT-OSS-20B | temp 1, medium reasoning | Oct 29 | 227/347 | 300/347 |
 
 `Exact answers` counts row-wise matches to CypherBench `answer_json`.
 `Executed` counts questions without an execution or termination failure; it
@@ -87,6 +91,27 @@ is also complete for these three profiles. ANA scores 85/100, 79/100 and 87/100
 respectively against matched saved-query baselines; these are a pinned subset,
 not substitutes for the 347-question scores above. No new LLM calls were used
 to derive those comparison results.
+
+## GPT-OSS-20B Matrix
+
+The four full runs share source-tree, prompt, tool and input-file identities,
+use concurrency 3, native tool calls, `tool_choice=auto`, 16,000 output tokens
+and 12 steps. Their exact-match rates are 62.5%, 64.0%, 66.0% and 65.4% in the
+table order above. Medium reasoning adds five answers at temperature 0 but
+removes two at temperature 1; these unreplicated observations do not establish
+a systematic reasoning benefit.
+
+Parsing exceptions number 5, 5, 17 and 22; step-limit endings number 29, 27,
+18 and 23. All request accounting is settled, with 15, 18, 3 and 0 HTTP retries
+and no failed logical calls or observed length finishes. The failed parsing
+inputs were not archived, so malformed tool arguments cannot be assumed to be
+the sole cause. `pattern_query` repeatedly encounters node-versus-relationship
+property confusion, missing start labels and invented handles. Counts include
+recovered operation errors, not only terminal failures.
+
+These historical full runs did **not** use shared preflight. The opt-in live
+smoke check is diagnostic only and is not archived as a full run or mixed into
+these scores. See [reproduction](reproduction.md#opt-in-common-graph-and-schema-preflight).
 
 ## Interpreting Failures
 
