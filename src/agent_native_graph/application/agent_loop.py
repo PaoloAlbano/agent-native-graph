@@ -43,15 +43,17 @@ def _json_system_prompt(*, enable_planning_tools: bool, schema_entry: str) -> st
     )
 
 
-def _task_prompt(question: str, transcript: list[dict[str, Any]]) -> str:
-    return json.dumps(
-        {
-            "question": question,
-            "previous_tool_results": transcript[-8:],
-            "instruction": "Choose the next tool call. Use fetch when the answer handle is ready.",
-        },
-        ensure_ascii=False,
-    )
+def _task_prompt(
+    question: str, transcript: list[dict[str, Any]], schema_bootstrap: str | None = None
+) -> str:
+    payload = {
+        "question": question,
+        "previous_tool_results": transcript[-8:],
+        "instruction": "Choose the next tool call. Use fetch when the answer handle is ready.",
+    }
+    if schema_bootstrap is not None:
+        payload["schema_bootstrap"] = schema_bootstrap
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _next_action(
@@ -64,6 +66,7 @@ def _next_action(
     enable_planning_tools: bool,
     schema_entry: str,
     enable_runner_guardrails: bool = False,
+    schema_bootstrap: str | None = None,
 ) -> dict[str, Any]:
     if not native_tools:
         message = llm.chat(
@@ -75,7 +78,7 @@ def _next_action(
                         schema_entry=schema_entry,
                     ),
                 },
-                {"role": "user", "content": _task_prompt(question, transcript)},
+                {"role": "user", "content": _task_prompt(question, transcript, schema_bootstrap)},
             ]
         )
         raw = str(message.get("content") or "")
@@ -100,7 +103,7 @@ def _next_action(
                     schema_entry=schema_entry,
                 ),
             },
-            {"role": "user", "content": _task_prompt(question, transcript)},
+            {"role": "user", "content": _task_prompt(question, transcript, schema_bootstrap)},
         ],
         tools=_tool_specs(enable_planning_tools=enable_planning_tools, schema_entry=schema_entry),
         tool_choice=tool_choice,

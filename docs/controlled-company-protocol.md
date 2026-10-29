@@ -285,8 +285,10 @@ Do not use today's commands as if they enforced this design.
 The G1/G2/G4 foundation slice is available through explicit profile/pin options
 documented in [reproduction](reproduction.md#pinned-source-and-shared-provider).
 Passive request accounting and cancellable HTTP are implemented too, with native
-generation limits retained. G5/G7 still require common verified graph/schema
-observations and retrieval-only variants; G6 still requires common approved
+generation limits retained. An [opt-in shared preflight](reproduction.md#opt-in-common-graph-and-schema-preflight)
+now verifies graph content and supplies equal canonical initial schema facts.
+It does not provide an atomic snapshot or after-run certification. G5/G7 still
+require full observation parity and retrieval-only variants; G6 requires common approved
 deadline values, global endpoint admission and crash recovery.
 Only after G8 checks pass should either stage be submitted for launch approval.
 

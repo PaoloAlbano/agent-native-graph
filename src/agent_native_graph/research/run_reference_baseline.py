@@ -74,6 +74,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default="password")
     parser.add_argument("--database", default="neo4j")
+    parser.add_argument(
+        "--shared-preflight",
+        action="store_true",
+        help="Verify full graph content and bootstrap the same canonical schema as ANA; new treatment",
+    )
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--reasoning", choices=("none", "medium"), default="none")
     parser.add_argument("--max-tokens", type=int, default=16000)
@@ -121,6 +126,17 @@ async def _score_cypher(graph_client, cypher: str | None, expected: list[list], 
     )
     rows = result["rows"]
     return result["ok"] and result_matches_answer(rows, expected), rows, result["error"]
+
+
+async def _prepare_shared_preflight(args):
+    from neo4j import AsyncGraphDatabase
+
+    from agent_native_graph.research.common_preflight import prepare_preflight_async
+
+    async with AsyncGraphDatabase.driver(
+        args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+    ) as driver:
+        return await prepare_preflight_async(driver, args.database, args.graph)
 
 
 async def _generate_answer(runner, task, schema_text, mode):
@@ -179,6 +195,8 @@ async def _execute_question(task, runner, graph_client, schema_text, expected, a
 
 
 async def _run(args: argparse.Namespace) -> None:
+    if getattr(args, "shared_preflight", False) and not args.profile:
+        raise ValueError("--shared-preflight requires --profile and --reference-commit")
     if args.profile and not args.reference_commit:
         raise ValueError("--profile requires --reference-commit")
     if not args.database.strip():
@@ -247,8 +265,15 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
         raise ValueError("ANA and reference Company task qids differ")
     validate_task_contents(tasks, reference_tasks)
     reference_graph = reference_repo / "data/cypherbench/graphs/simplekg/company_simplekg.json"
-    if _sha256(args.graph) != _sha256(reference_graph):
+    graph_sha = _sha256(args.graph)
+    if graph_sha != _sha256(reference_graph):
         raise ValueError("ANA and reference graph dumps differ")
+
+    shared = None
+    if getattr(args, "shared_preflight", False):
+        shared = await _prepare_shared_preflight(args)
+        if shared["graph_sha256"] != graph_sha:
+            raise ValueError("Graph input changed after reference input comparison")
 
     metadata = {
         **provenance,
@@ -289,12 +314,16 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
         "concurrency": args.concurrency,
         "limit": args.limit,
         "scoring": "ana_exact_answer_json_on_replayed_cypher",
-        "schema_strategy": "live_full_distinct_relationship_patterns",
+        "schema_strategy": "shared-canonical-v1"
+        if shared is not None
+        else "live_full_distinct_relationship_patterns",
         "tasks_sha256": _sha256(args.tasks),
-        "graph_sha256": _sha256(args.graph),
+        "graph_sha256": graph_sha,
         "max_score_rows": args.max_score_rows,
         "call_logs": [],
     }
+    if shared is not None:
+        metadata["shared_preflight"] = shared
 
     if args.check_only:
         settings = Settings(
@@ -308,8 +337,13 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
         )
         async with MemgraphClient(settings.memgraph) as graph_client:
             await graph_client.verify_connectivity()
-            schema = await _complete_schema(graph_client)
-            labels = schema.node_labels()
+            schema = await _complete_schema(graph_client) if shared is None else None
+            labels = schema.node_labels() if schema is not None else shared["schema"]["labels"]
+            rel_types = (
+                schema.relationship_types()
+                if schema is not None
+                else shared["schema"]["relationship_types"]
+            )
             if not labels:
                 raise ValueError("Neo4j schema is empty; load Company first")
             score_ok, _, score_error = await _score_cypher(
@@ -322,7 +356,7 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
                 {
                     "validated_tasks": len(tasks),
                     "labels": labels,
-                    "relationship_types": schema.relationship_types(),
+                    "relationship_types": rel_types,
                     "score_probe": True,
                     **metadata,
                 }
@@ -385,8 +419,13 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
     try:
         async with MemgraphClient(settings.memgraph) as graph_client:
             await graph_client.verify_connectivity()
-            schema_text = (await _complete_schema(graph_client)).to_cypher_like_prompt()
-            if not schema_text.strip() or not (await graph_client.get_node_labels()):
+            if shared is not None:
+                schema_text = shared["schema_prompt"]
+                labels = shared["schema"]["labels"]
+            else:
+                schema_text = (await _complete_schema(graph_client)).to_cypher_like_prompt()
+                labels = await graph_client.get_node_labels()
+            if not schema_text.strip() or not labels:
                 raise ValueError("Neo4j schema is empty; load Company first")
 
             async def run_one(task: dict, runner) -> None:

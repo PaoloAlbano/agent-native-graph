@@ -184,8 +184,50 @@ not a replacement for database read-only credentials and procedure permissions.
 This is **foundation-only**, not compliance with the
 [controlled Company protocol](controlled-company-protocol.md). Shared generation
 budgets, global HTTP concurrency, common approved deadline values,
-canonical observations and retrieval-only variants still require implementation.
+retrieval-only variants and full observation parity still require implementation.
+The opt-in preflight below provides before-run verification and equal initial
+schema facts only, not the complete matched-condition protocol.
 No historical results are rewritten by these commands.
+
+### Opt-In Common Graph And Schema Preflight
+
+`SHARED_PREFLIGHT=1` is a new experimental treatment, not a reinterpretation of
+historical runs. Leave it off to preserve the existing runner behavior. It uses
+the same SimpleKG-to-Neo4j normalization and full-content fingerprint for ANA and
+profile-enabled reference baselines, then collects canonical live metadata:
+labels, relationship types, node/relationship property types and mandatory flags,
+and directed label endpoint patterns. Unknown types/mandatory flags stay unknown.
+No entity samples or property values are added to the initial schema prompt.
+
+```bash
+make benchmark MODEL=<model-id> PROFILE=temp0-none SHARED_PREFLIGHT=1
+make baseline-run MODEL=<model-id> BASELINE_MODE=single \
+  BASELINE_PROFILE=temp0-none REFERENCE_COMMIT=<full-40-character-sha> SHARED_PREFLIGHT=1
+```
+
+Both can select `NEO4J_DATABASE=<name>` (default `neo4j` in this mode). The same
+canonical JSON schema is passed as baseline `schema_text` and as ANA's explicit
+`schema_bootstrap` user-message field. ANA schema tools use that same canonical
+metadata. The controllers still have different prompts, tools and subsequent
+observations; this is equal initial schema evidence, not identical trajectories.
+The existing ANA `SCHEMA_JSON` input remains recorded for compatibility, but is
+not used to supply the shared model/bootstrap metadata; the config explicitly
+records `schema_source=shared-live-preflight-v1`.
+
+New `shared_preflight` evidence in the saved ANA config/reference metadata records
+the graph dump hash, verified node/edge fingerprints, named database, canonical
+schema and its prompt hashes. Node/edge counts alone are insufficient: property,
+label, endpoint or duplicate differences fail before inference. A graph/schema
+identity change rejects resume. Shared mode requires an explicit pinned profile
+for reference baselines. ANA `CHECK_ONLY=1` cannot be combined with this live
+verification; baseline check-only still allows live preflight without model calls.
+
+The preflight performs full graph reads and schema metadata collection before
+question timing. It never loads, clears or mutates Neo4j. This is **before-run**
+verification, not an atomic snapshot or exclusion of concurrent writers, and it
+does not certify after-run state or the entire controlled protocol. Keep the graph
+read-only externally. The schema bootstrap can be large; this research mode does
+not replace the bounded discovery tools used by ordinary library/server clients.
 
 ### Request Accounting
 
