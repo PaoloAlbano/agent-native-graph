@@ -16,6 +16,15 @@ make docs-serve
 
 Open `http://127.0.0.1:8000`. Override the local port with `DOCS_PORT=8001`.
 
+`make docs-build` also runs `social_preview.py` to add static Open Graph and
+Twitter card metadata to every generated page, using `ana-social-preview.png`.
+The image reproduces the header wordmark and is copied to the published assets.
+Titles and descriptions come from each page; image and page URLs are absolute.
+For a fork or custom domain, pass `DOCS_PUBLIC_URL=https://example.org/project/`.
+The lower-level `build-docs` CLI generates the research content only; use Make
+for the complete deployable site, as CI does. Preview changes become available
+after publishing; sharing platforms may cache an earlier preview.
+
 The build writes generated HTML, assets, JSON projections and `.nojekyll` into
 the ignored `build/site/` directory, both locally and in CI. `docs/` contains
 only public Markdown and editable site sources. It is not the output directory.
@@ -24,11 +33,13 @@ assembles and deploys the generated artifact. No database, inference endpoint,
 or API key is needed to build. Override `DOCS_OUT` for another build directory;
 `make docs-serve` serves that same directory.
 
-The workflow `.github/workflows/docs.yml` calls the reusable code checks in
-`.github/workflows/ci.yml`: lint/format first, then Python and browser tests in
-separate named jobs. Only successful code checks allow **Build Documentation**;
-**Publish GitHub Pages** runs only on `main`, never from pull requests. The test
-job does not need the external comparison checkout or model/database secrets.
+The entry point `.github/workflows/ci.yml` runs on every branch push, pull request
+and manual invocation: lint/format first, then Python and browser tests. Successful
+code checks call the reusable `.github/workflows/docs.yml` builder. On feature
+branches and PRs this is **Check Documentation Build**, without artifact upload
+or deployment. On `main` it is **Build Release Documentation**, followed by artifact
+upload and **Publish GitHub Pages**. The test job needs neither the comparison
+checkout nor model/database secrets; only the builder checks out the pinned source.
 Select **GitHub Actions** as the Pages source in repository
 settings. CI builds into `build/site/` so only generated public site artifacts
 are uploaded. Editorial Markdown files remain available through repository links.
@@ -37,7 +48,8 @@ To contribute a Company run, add its complete archive (`manifest.json`,
 `summary.json`, `failures.jsonl`, `run.jsonl`, `run-config.json`) under
 `results/cypherbench-company/full/runs/<unique-run-id>/` and open a pull request.
 The workflow validates and builds the site without publishing from pull requests.
-After merge to `main`, it rebuilds and publishes Pages automatically. No hand
+After merge to `main`, the complete CI pipeline rebuilds and publishes Pages
+automatically if all checks pass. No hand
 editing of generated HTML or model lists is needed. New models without matching
 external baselines remain visible under ANA results; comparison availability is
 reported explicitly instead of blocking the site build. A historical saved

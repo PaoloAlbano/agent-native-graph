@@ -29,17 +29,29 @@ Never load or clear someone else's database to make a test pass.
 
 For documentation, run `make docs-build` with the pinned reference repository
 available as described in [site maintenance](docs/site/README.md). CI validates
-pull requests and publishes Pages only after relevant changes merge to `main`.
+every branch push and pull request, and publishes Pages from `main` only.
 Do not commit the generated `build/site/` output.
 
-GitHub Actions shows separate checks in order: **Lint and Format**, **Code Tests**,
-**Build Documentation**, then **Publish GitHub Pages** on `main` only. The reusable
-code workflow is [ci.yml](.github/workflows/ci.yml); [docs.yml](.github/workflows/docs.yml)
-orchestrates it and owns site build/deployment. A lint failure stops tests; a test
-failure stops the documentation build. Python tests use `make test`, without
+GitHub Actions starts in [ci.yml](.github/workflows/ci.yml), with separate checks:
+
+| Stage | Feature branches and pull requests | `main` |
+| --- | --- | --- |
+| Lint and Format | Python lint/format and browser syntax | Same checks |
+| Code Tests | `make test` and browser tests | Same tests |
+| Documentation | Check Documentation Build, no release artifact | Build Release Documentation and upload the Pages artifact |
+| Publish GitHub Pages | Never | Deploy only after all preceding stages pass |
+
+[docs.yml](.github/workflows/docs.yml) is the reusable documentation builder,
+not the entry point for code tests. A lint failure stops tests; a test failure
+stops the docs build. The builder repeats no lint/tests. Python tests need no
 model inference or opt-in external integrations; skipped tests are not verified
-integrations. Browser syntax is checked with lint, and browser tests run with
-the code tests. The external comparison checkout is needed only by the site build.
+integrations. Only the docs builder checks out the pinned comparison repository.
+
+Opening or updating a pull request can create a separate check run in addition
+to its branch-push run. Manual runs are available on the **CI** workflow; a manual
+run on a feature branch still cannot publish Pages. If branch protection requires
+old check names, update required checks to the names shown on the current PR.
+Changing these workflows does not configure repository protection rules.
 
 ## Add Research Results
 

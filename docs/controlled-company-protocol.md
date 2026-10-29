@@ -283,10 +283,23 @@ boundaries and `make benchmark` / `make baseline-run` after the gates are tested
 Do not use today's commands as if they enforced this design.
 
 The G1/G2/G4 foundation slice is available through explicit profile/pin options
-documented in [reproduction](reproduction.md#pinned-source-and-shared-provider),
-with fake-provider tests. G3/G6 next add complete accounting and deadlines without
-a new generation cap; G5/G7 finish shared observations and retrieval variants.
+documented in [reproduction](reproduction.md#pinned-source-and-shared-provider).
+Passive request accounting and cancellable HTTP are implemented too, with native
+generation limits retained. G5/G7 still require common verified graph/schema
+observations and retrieval-only variants; G6 still requires common approved
+deadline values, global endpoint admission and crash recovery.
 Only after G8 checks pass should either stage be submitted for launch approval.
+
+### Preserve Running Experiments
+
+Do not edit executable sources, model profiles, dependencies or the live graph
+while a benchmark matrix is running. Each matrix command starts a new process;
+later cells could otherwise load a different treatment even if an earlier cell
+already imported its code. Develop changes in an isolated copy and test them
+with fake providers/graphs until the active run block ends. Documentation and
+workflow edits do not change model payloads. Never apply a prepared source patch
+automatically when a process exits: review the diff and activate a new version
+explicitly. Do not resume an old run under the changed execution identity.
 
 ## Prospective Artifacts And Approval
 

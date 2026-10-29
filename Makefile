@@ -38,6 +38,7 @@ BASELINE_OUT ?= $(RUN_DIR)/baseline_$(BASELINE_MODE)_$(subst /,_,$(MODEL))_$(if 
 COMPARISON_OUT ?= $(RUN_DIR)/comparison/cypherbench-company.md
 DOCS_PORT ?= 8000
 DOCS_OUT ?= build/site
+DOCS_PUBLIC_URL ?= https://paoloalbano.github.io/agent-native-graph/
 PROFILE ?= temp0-none
 PROVIDER_TAG ?= openai-compatible
 CHECK_ONLY ?= 0
@@ -90,10 +91,10 @@ install-mcp:
 	@uv sync --locked --extra dev --extra service --extra mcp
 
 format:
-	@uv run ruff format src/agent_native_graph tests examples
+	@uv run ruff format src/agent_native_graph tests examples docs/site/social_preview.py
 
 lint:
-	@uv run ruff check src/agent_native_graph tests examples
+	@uv run ruff check src/agent_native_graph tests examples docs/site/social_preview.py
 
 test:
 	@uv run pytest tests -q
@@ -207,6 +208,7 @@ paper:
 
 docs-build:
 	@uv run agent-native-graph build-docs --out "$(DOCS_OUT)" --reference-repo "$(REFERENCE_REPO)"
+	@uv run python docs/site/social_preview.py --site-dir "$(DOCS_OUT)" --base-url "$(DOCS_PUBLIC_URL)"
 
 docs-serve: docs-build
 	@uv run python -m http.server "$(DOCS_PORT)" --bind 127.0.0.1 --directory "$(DOCS_OUT)"
