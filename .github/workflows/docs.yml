@@ -33,7 +33,7 @@ jobs:
           path: build/reference
           persist-credentials: false
       - name: Build static site
-        run: uv run agent-native-graph build-docs --out build/site --reference-repo build/reference
+        run: make docs-build DOCS_OUT=build/site REFERENCE_REPO=build/reference
       - uses: actions/upload-pages-artifact@v4
         if: inputs.publish && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:

@@ -5,8 +5,10 @@ Agent-Native Graph research prototype.
 
 This document describes the current reproducible treatment. A separate
 [prospective matched-condition design](controlled-company-protocol.md) audits
-what must change before a new controlled comparison; it is not implemented or
-an instruction to reinterpret the historical runs.
+what must change before a new controlled comparison. Foundation adapters,
+request accounting and cancellable transport exist, but the complete matched
+protocol is not implemented or certified. It is not an instruction to reinterpret
+historical runs as controlled evidence.
 
 For new full ANA runs, use [Contribute a Company Run](run-standard.md): launch
 with `make benchmark`, then archive the printed output with

@@ -78,6 +78,45 @@
     "temperature": 1.0
   },
   {
+    "accuracy": 0.6397694524495677,
+    "avg_llm_calls": 6.239193083573487,
+    "avg_tool_calls": 6.22478386167147,
+    "executable_rate": 0.9048991354466859,
+    "limit": 347,
+    "model": "openai/gpt-oss-20b",
+    "path": "full/runs/2026-10-28_openai-gpt-oss-20b_temp0_reasoning-medium_tools-native_n347_2026-10-28t20-02-37.971912-00-00",
+    "reasoning": "medium",
+    "run_id": "2026-10-28_openai-gpt-oss-20b_temp0_reasoning-medium_tools-native_n347_2026-10-28t20-02-37.971912-00-00",
+    "suite": "full",
+    "temperature": 0.0
+  },
+  {
+    "accuracy": 0.6253602305475504,
+    "avg_llm_calls": 6.285302593659942,
+    "avg_tool_calls": 6.270893371757925,
+    "executable_rate": 0.8962536023054755,
+    "limit": 347,
+    "model": "openai/gpt-oss-20b",
+    "path": "full/runs/2026-10-28_openai-gpt-oss-20b_temp0_reasoning-none_tools-native_n347_2026-10-28t18-25-24.196537-00-00",
+    "reasoning": "none",
+    "run_id": "2026-10-28_openai-gpt-oss-20b_temp0_reasoning-none_tools-native_n347_2026-10-28t18-25-24.196537-00-00",
+    "suite": "full",
+    "temperature": 0.0
+  },
+  {
+    "accuracy": 0.659942363112392,
+    "avg_llm_calls": 5.688760806916426,
+    "avg_tool_calls": 5.639769452449568,
+    "executable_rate": 0.8962536023054755,
+    "limit": 347,
+    "model": "openai/gpt-oss-20b",
+    "path": "full/runs/2026-10-28_openai-gpt-oss-20b_temp1_reasoning-none_tools-native_n347_2026-10-28t19-16-15.494749-00-00",
+    "reasoning": "none",
+    "run_id": "2026-10-28_openai-gpt-oss-20b_temp1_reasoning-none_tools-native_n347_2026-10-28t19-16-15.494749-00-00",
+    "suite": "full",
+    "temperature": 1.0
+  },
+  {
     "accuracy": 0.8357348703170029,
     "avg_llm_calls": 5.599423631123919,
     "avg_tool_calls": 5.599423631123919,
@@ -113,6 +152,19 @@
     "path": "full/runs/2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-none_tools-native_n347_2026-10-28t11-36-33.015601-00-00",
     "reasoning": "none",
     "run_id": "2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-none_tools-native_n347_2026-10-28t11-36-33.015601-00-00",
+    "suite": "full",
+    "temperature": 1.0
+  },
+  {
+    "accuracy": 0.654178674351585,
+    "avg_llm_calls": 5.827089337175792,
+    "avg_tool_calls": 5.763688760806916,
+    "executable_rate": 0.8645533141210374,
+    "limit": 347,
+    "model": "openai/gpt-oss-20b",
+    "path": "full/runs/2026-10-29_openai-gpt-oss-20b_temp1_reasoning-medium_tools-native_n347_2026-10-28t21-07-28.153292-00-00",
+    "reasoning": "medium",
+    "run_id": "2026-10-29_openai-gpt-oss-20b_temp1_reasoning-medium_tools-native_n347_2026-10-28t21-07-28.153292-00-00",
     "suite": "full",
     "temperature": 1.0
   }

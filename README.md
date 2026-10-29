@@ -158,12 +158,22 @@ and scripts live in [`docs/site/`](docs/site/); generated output goes to ignored
 Building needs neither Neo4j nor an LLM key. The comparison uses a local checkout
 of its pinned external Git source; see [site maintenance](docs/site/README.md).
 To enable deployment in a fork, select **Settings > Pages > Source > GitHub Actions**.
-The [website workflow](.github/workflows/docs.yml) first calls the reusable
-[code checks](.github/workflows/ci.yml): lint/format, then Python and browser
-tests. Documentation build follows only if they pass; publication runs on `main`.
+The [CI workflow](.github/workflows/ci.yml) runs lint/format and then Python and
+browser tests on branch pushes and pull requests. It calls the reusable
+[documentation builder](.github/workflows/docs.yml) only after those checks pass.
+Feature branches and PRs only check the build; `main` builds the release artifact
+and publishes Pages. Manual CI runs on feature branches never publish.
 Do not commit generated HTML/JSON or create a separate `gh-pages` branch.
 
 ## Experimental HTTP Service
+
+For implementation status, distinguish the reusable prototype from the research
+design: Python tools and the authenticated session-based HTTP demo are available;
+the [matched-condition protocol](docs/controlled-company-protocol.md) is still a
+design with partially implemented gates. Request accounting and cancellable
+HTTP do not by themselves make historical runs controlled experiments. See
+[reproduction](docs/reproduction.md) for supported commands and
+[library/server limits](docs/library-and-server.md) before deployment.
 
 The demo service exposes graph operations without embedding an LLM. Static
 bearer API keys identify clients and bind sessions to their owners. Server-owned
