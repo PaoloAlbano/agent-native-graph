@@ -34,7 +34,12 @@
 .failed { color: #9a4828; }
 .recorded-sequence { padding-left: 1.5rem; }
 .recorded-sequence li { padding: .5rem 0 1rem; border-bottom: 1px solid #d5dad1; }
-.recorded-sequence h5 { font: 600 .95rem/1.4 monospace; overflow-wrap: anywhere; margin: .5rem 0; }
+.recorded-sequence h4, .recorded-sequence h5 { font: 600 .95rem/1.4 monospace; overflow-wrap: anywhere; margin: .5rem 0; }
+.results-main .ana-trajectory { margin: 1.5rem 0; }
+.ana-trajectory .step-summary { font-size: .85rem; color: #3f4c46; }
+.ana-trajectory .execution-error { border-left: 3px solid #a34629; }
+.comparison-nav { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
+#ana-flow, #direct-cypher, #multi-agent, #question-detail { scroll-margin-top: 1.5rem; }
 .results-main footer { border-top: 1px solid #d5dad1; padding-top: 2rem; font-size: .9rem; }
 @media (max-width: 1100px) { .run-panes.comparing { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .explorer-controls { grid-template-columns: minmax(0, 1fr); } .results-main { padding: 1rem 5vw 3rem; } .run-detail { padding: .7rem; } }

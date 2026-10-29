@@ -66,7 +66,11 @@ question tables or JSON fetches. Ordinary links navigate between pages.
 Only run pages load the explorer, with filters, tool traces and optional
 per-question comparisons with another run.
 Question URLs retain run selections and QID so individual analyses can be shared.
-Run labels explicitly include temperature and reasoning. The results index has
+Run labels include temperature, reasoning and a stable short run identifier,
+not a launch date. The identifier derives from the unchanged archive ID, so
+repeated profiles remain distinguishable without renaming files or breaking
+links. Original dates stay in downloadable provenance, not navigation labels.
+The results index has
 an overview generated from all validated archives, with a per-model observed
 score range and retained run count; ranges are not pooled means or confidence
 intervals. Historical generations and shared-preflight smoke diagnostics remain
@@ -114,6 +118,15 @@ Generated `comparison.html`, `comparison-*.html`, `assets/comparison.js` and
 `data/comparison/` present only matched Company profiles on the pinned 100 QIDs.
 Overview/profile pages require no JavaScript. A question page fetches only its
 ANA record and the corresponding direct/agentic records and call logs.
+
+Question comparisons render ANA's recorded execution inline using the same
+trajectory renderer as the full-run explorer: ordered tools, arguments, output
+summaries, clickable input-handle lineage and bounded response disclosures.
+Technical failure is distinguished from an executed answer mismatch. Empty
+transcripts explicitly explain missing steps; a zero-tool JSON parsing failure
+must not look like an unexplained empty graph result. Failed response text is
+not reconstructed when the archive does not contain it. The full-run question
+link retains the QID and scrolls/focuses its expanded evidence after loading.
 
 The source repo is read through Git objects, not mutable local files. No data is
 written into `results/`. Missing source evidence is explicit, never replaced by

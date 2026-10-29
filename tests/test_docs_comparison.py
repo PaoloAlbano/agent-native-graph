@@ -123,6 +123,10 @@ def test_comparison_uses_pinned_git_objects_not_dirty_worktree(reference):
     assert "re-executed exact match" not in overview
     assert "100/100" in overview
     assert "source judge" in overview
+    assert "2026-10-26" not in overview
+    assert module.run_label("ana-test") in overview
+    for generated in output.glob("comparison-*.html"):
+        assert "2026-10-26" not in generated.read_text()
     assert len(list(output.glob("comparison-*.html"))) == 101
     provenance = json.loads((output / "data/comparison/provenance.json").read_text())
     assert provenance["count"] == 100
@@ -131,6 +135,10 @@ def test_comparison_uses_pinned_git_objects_not_dirty_worktree(reference):
         (output / f"data/comparison/{module.key('ana-test')}/{module.key('q000')}.json").read_text()
     )
     assert "source_file" not in meta["ana"]["config"]
+    assert meta["ana"]["page"] == f"run-{module.key('ana-test')}.html#q=q000"
+    browser_script = (ROOT / "docs/site/comparison.js").read_text()
+    assert "ANAResultsUI.createTrajectory(document, ana" in browser_script
+    assert "ANAResultsUI.outcome(ana)" in browser_script
     detail = json.loads((output / meta["external"]["single"]["detail"]).read_text())
     assert detail["logs"]["calls.jsonl"][0]["response"] == "RETURN 1"
     assert detail["trace"]["correct"] is True
@@ -155,7 +163,9 @@ def test_new_model_without_baseline_does_not_break_build(reference, monkeypatch)
     module.publish_comparison(root, output, repo)
     text = (output / "comparison.html").read_text()
     assert "matching baseline pair not available" in text
-    assert "new-run" in text
+    assert "new/model" in text
+    assert module.run_label("new-run") in text
+    assert f"run-{module.key('new-run')}.html" in text
     assert "100/100" in text
 
 

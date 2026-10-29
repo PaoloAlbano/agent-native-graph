@@ -23,7 +23,7 @@
   @@MODEL_NAV@@
   @@EVIDENCE_SUMMARY@@
   <section aria-labelledby="runs-heading"><h2 id="runs-heading">The runs.</h2>
-    <div class="results-table"><table><thead><tr><th>Model / date</th><th>Temperature</th><th>Reasoning requested</th><th>Correct</th><th>Execution OK</th><th>Execution not OK</th><th>Mean LLM calls</th><th>Mean tool calls</th></tr></thead><tbody>@@RUN_ROWS@@</tbody></table></div>
+    <div class="results-table"><table><thead><tr><th>Model / run</th><th>Temperature</th><th>Reasoning requested</th><th>Correct</th><th>Execution OK</th><th>Execution not OK</th><th>Mean LLM calls</th><th>Mean tool calls</th></tr></thead><tbody>@@RUN_ROWS@@</tbody></table></div>
     <div class="metric-guide"><h3>How to read these numbers</h3>
       <p><strong>Correct</strong> is the archived <code>matches_answer_json</code> result against the benchmark answer. <strong>Execution OK</strong> is the archived runner flag <code>ok</code>, not a correctness guarantee. A run can finish and still return the wrong answer. Individual tool errors can also be recovered before completion.</p>
       <p>Call means use all 347 questions, including failures. Reasoning is the requested configuration, not proof of what a provider executed. Counts and archive checksums are validated during the site build; answers are not re-scored by this website.</p>
