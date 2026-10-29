@@ -46,6 +46,31 @@ to those failed attempts. No recorded rate-limit retry, length-finished response
 or low-effort retry occurred; this observation does not reconstruct missing
 metrics. Q28-0M records two HTTP retries.
 
+## GPT-OSS-20B Matrix
+
+The same terminal-failure audit on the four complete GPT-OSS-20B runs gives:
+
+| Observation | No final fetch at step limit | Parsing exceptions | Tasks with a timed-out tool | Timeout-affected tasks later correct |
+| --- | ---: | ---: | ---: | ---: |
+| S28-0N | 29 | 5 | 1 | 0 |
+| S28-0M | 27 | 5 | 1 | 0 |
+| S28-1N | 18 | 17 | 1 | 0 |
+| S29-1M | 23 | 22 | 1 | 0 |
+
+Parsing exceptions increase at temperature 1 in these observations. Settled
+request accounting records no length-finished responses or failed logical LLM
+calls in any of the four runs; 15, 18, 3 and 0 HTTP retries respectively were
+settled. This rules out an unrecorded pending request as the explanation in
+these artifacts, but the failed parsing inputs were not archived. We cannot
+attribute every JSON exception specifically to malformed native tool arguments.
+
+Operation-level `pattern_query` errors number 25, 31, 22 and 30 in the same
+order. Repeated errors include treating node `name` as a relationship property,
+omitting `start_label`, and referring to a handle that has not been created.
+These counts include recoverable errors and are not terminal failure totals.
+The schema discovery and pattern tools remain unchanged for this audit; no
+question-specific correction or automatic fallback was introduced.
+
 ## Recurrent Trajectory Fragility
 
 The following cases are selected because both recur among terminal failures in

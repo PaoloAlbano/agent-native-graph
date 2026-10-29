@@ -1,0 +1,1564 @@
+{
+  "status": "complete",
+  "created_at": "2026-10-29T06:59:15.798921+00:00",
+  "source": {
+    "repository": "PaoloAlbano/multi-agent-graphrag-implementation",
+    "branch": "llm_calls_recap",
+    "commit": "72fe7105310c85ebe6b1b3b7d4c6152ddb206393",
+    "qid_file": "data/reference_company100_qids.json",
+    "execution_evaluation": "results/cypherbench-company/query-reexecution/2026-10-28-qwen-matrix"
+  },
+  "qid_sha256": "f0bcf3c3a248761e9551e435343ef06ab79191fa1b013b45fb646b060bfefeaa",
+  "graph_sha256": "54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b",
+  "snapshot_before": {
+    "nodes": {
+      "count": 581306,
+      "sha256": "8b8da7bfedd360c6c4895e49ab593614e1f949cf6d5ce94eee485ca038713e8b"
+    },
+    "edges": {
+      "count": 299581,
+      "sha256": "d12781227b7e08521aa7b5b12166a5c9332fa87976841ac07e5ab7791b6976b2"
+    }
+  },
+  "query_timeout_s": 30.0,
+  "max_rows": 100000,
+  "metric": "ana_exact_answer_json_on_reexecuted_cypher",
+  "comparator_sha256": "e386cb61c6ca462b47a1e49ebcc1a7ac85c124a1afc79877d37db642df72e373",
+  "ana": {
+    "2026-10-24_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_company_ana_gptoss120_temp0_none_current_n347": {
+      "total": 100,
+      "correct": 87,
+      "execution_ok": 99,
+      "errors": 1,
+      "run_sha256": "d1404afbd85d38ca3429cfc8db45691e3a7e0920c84cd3c32d2ba783fc7e0a3b",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 86,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "2026-10-24_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_company_ana_gptoss120_temp1_medium_current_n347": {
+      "total": 100,
+      "correct": 87,
+      "execution_ok": 98,
+      "errors": 2,
+      "run_sha256": "0deed2ee854422113fa3ab86351420b3f0c0f30b5eb555ab7f928861b2cccb7e",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 86,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "2026-10-25_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_company_gptoss120_temp0_repeat2_n347": {
+      "total": 100,
+      "correct": 88,
+      "execution_ok": 100,
+      "errors": 0,
+      "run_sha256": "a9a489b85893265f273126e64784107fbcf9f2445567681b0591fca41ab6047f",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 88,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "2026-10-25_qwen-qwen3.5-27b_temp0_reasoning-none_tools-native_n347_qwen35_temp0_full_n347": {
+      "total": 100,
+      "correct": 85,
+      "execution_ok": 99,
+      "errors": 1,
+      "run_sha256": "ecc263e9cb3ee44f32801f8ef4a6561fee9a08615a7c15eebd4110ce9fafea3f",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 85,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "2026-10-27_openai-gpt-oss-120b_temp0_reasoning-medium_tools-native_n347_2026-10-27t20-30-54.912565-00-00": {
+      "total": 100,
+      "correct": 86,
+      "execution_ok": 100,
+      "errors": 0,
+      "run_sha256": "4603baad851ffcbe3fa654b1624750cb91eacb4cb98e1b58ed71f2c3ef84c30d",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 86,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "2026-10-27_openai-gpt-oss-120b_temp1_reasoning-none_tools-native_n347_2026-10-27t20-58-50.991279-00-00": {
+      "total": 100,
+      "correct": 86,
+      "execution_ok": 100,
+      "errors": 0,
+      "run_sha256": "979eaf2ee39b6ded93223f3680bb634b1ab80f55453d8f2311f6411fbc56e6ef",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 85,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "2026-10-28_openai-gpt-oss-20b_temp0_reasoning-medium_tools-native_n347_2026-10-28t20-02-37.971912-00-00": {
+      "total": 100,
+      "correct": 62,
+      "execution_ok": 92,
+      "errors": 8,
+      "run_sha256": "e1d064e96935cc63875afea045628d31a2f9a49edc64c566aeb1f266a1098b24",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 62,
+        "execution_ok": 92,
+        "errors": 7
+      }
+    },
+    "2026-10-28_openai-gpt-oss-20b_temp0_reasoning-none_tools-native_n347_2026-10-28t18-25-24.196537-00-00": {
+      "total": 100,
+      "correct": 60,
+      "execution_ok": 89,
+      "errors": 11,
+      "run_sha256": "42d0200d125432100bf2d452ee6eba2485fc3c514fa5f409c7d4b77f75452b9a",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 60,
+        "execution_ok": 88,
+        "errors": 11
+      }
+    },
+    "2026-10-28_openai-gpt-oss-20b_temp1_reasoning-none_tools-native_n347_2026-10-28t19-16-15.494749-00-00": {
+      "total": 100,
+      "correct": 70,
+      "execution_ok": 89,
+      "errors": 11,
+      "run_sha256": "f785d26373c6726491014ebe8a83d3a4fb557022fcb967b8efbd807dcc9b322f",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 70,
+        "execution_ok": 88,
+        "errors": 11
+      }
+    },
+    "2026-10-28_qwen-qwen3.5-27b_temp0_reasoning-medium_tools-native_n347_2026-10-28t10-49-03.059153-00-00": {
+      "total": 100,
+      "correct": 85,
+      "execution_ok": 99,
+      "errors": 1,
+      "run_sha256": "12473d2d2e3b46dc12a1689482fb6e38c94449a332654f74d6d35732707d552e",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 84,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-medium_tools-native_n347_2026-10-28t12-03-16.667771-00-00": {
+      "total": 100,
+      "correct": 87,
+      "execution_ok": 99,
+      "errors": 1,
+      "run_sha256": "9f06244836e9bfdf117ee6241c7056e532a5ad64a2ae1a1122c1dbd34bb6e364",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 87,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "2026-10-28_qwen-qwen3.5-27b_temp1_reasoning-none_tools-native_n347_2026-10-28t11-36-33.015601-00-00": {
+      "total": 100,
+      "correct": 79,
+      "execution_ok": 100,
+      "errors": 0,
+      "run_sha256": "e3dd61d038b1dc360682e87b66d0a1b06b64096979a8c79b1be8b283047c51ce",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 79,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "2026-10-29_openai-gpt-oss-20b_temp1_reasoning-medium_tools-native_n347_2026-10-28t21-07-28.153292-00-00": {
+      "total": 100,
+      "correct": 63,
+      "execution_ok": 86,
+      "errors": 14,
+      "run_sha256": "a65a58ac9f71f8c15f4d46d36ceaf23292e517b4fa612f1e73034af93a042fd2",
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 63,
+        "execution_ok": 85,
+        "errors": 14
+      }
+    }
+  },
+  "baselines": {
+    "results/Qwen--Qwen3.5-27B/temp0.0-reasoning-medium/company/agentic": {
+      "total": 100,
+      "correct": 67,
+      "execution_ok": 100,
+      "errors": 0,
+      "file": "baseline-5313778c24ca0b82.jsonl",
+      "sha256": "edf987175535cb870fe71269493089982544abb15290e388dcca69d1d71234b7",
+      "trace_sha256": "c850ea6538ca8e50e6b5f0d7f6c5286663fd5d8828c091eb147ff7ab47e0da3b",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 0.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T22:04:40.950440+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 80,
+            "accuracy": 0.8
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 73,
+          "accuracy": 0.73,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 67,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp0.0-reasoning-medium/company/single": {
+      "total": 100,
+      "correct": 64,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-a93c548e4d3c24a9.jsonl",
+      "sha256": "f0132c197e7a7cab47ee11c2677226943e9e35ec3bce7ec9bc2642364b0cb592",
+      "trace_sha256": "3a498c22df5c5b3665cd2031bb3cfad8937d6349a859601c3b66e58f08ba742e",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 0.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T17:10:13.278386+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 74,
+            "accuracy": 0.74
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 69,
+          "accuracy": 0.69,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 64,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp0.0-reasoning-off/company/agentic": {
+      "total": 100,
+      "correct": 48,
+      "execution_ok": 97,
+      "errors": 3,
+      "file": "baseline-cd63edc1e251a8c1.jsonl",
+      "sha256": "21d1d2f7a1882d0b821748661c84beb3658fe75cc5da1ed8b28cec02b9fb9799",
+      "trace_sha256": "8c0a5d60b3b629bc55c4b6314e9b4ef68a7ad2404c5277d62a0e24e4b505f863",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 0.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-30T07:13:36.761233+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 61,
+            "accuracy": 0.61
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 59,
+          "accuracy": 0.59,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 48,
+        "execution_ok": 96,
+        "errors": 3
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp0.0-reasoning-off/company/single": {
+      "total": 100,
+      "correct": 47,
+      "execution_ok": 91,
+      "errors": 9,
+      "file": "baseline-8bef677a94300bfd.jsonl",
+      "sha256": "74316065afd9af5606c8ca5fd6a489640119f16aa33a0a1f8147bbf416f5f7b7",
+      "trace_sha256": "44674f0cd64a3c6d4681223f9182f55eefc494e25051bf4856a41dda8b3136fe",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 0.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-30T04:19:31.818644+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 55,
+            "accuracy": 0.55
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 55,
+          "accuracy": 0.55,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 47,
+        "execution_ok": 90,
+        "errors": 9
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp1.0-reasoning-medium/company/agentic": {
+      "total": 100,
+      "correct": 62,
+      "execution_ok": 96,
+      "errors": 4,
+      "file": "baseline-dad5710a65a98f68.jsonl",
+      "sha256": "a5470a0e5087dc60da9cfb3796a192fbb0e7c7a7bacc5079c586984173248acd",
+      "trace_sha256": "9c7d156d978e231ae033c267eee77c99efeb1f9a0b257e3ddce7b6ac88b36a4b",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 1.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-30T14:24:57.447364+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 72,
+            "accuracy": 0.72
+          }
+        ],
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 68,
+          "accuracy": 0.68,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        },
+        "judge_calls_log": "judge_calls.jsonl"
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 62,
+        "execution_ok": 95,
+        "errors": 4
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp1.0-reasoning-medium/company/single": {
+      "total": 100,
+      "correct": 59,
+      "execution_ok": 98,
+      "errors": 2,
+      "file": "baseline-a1305cee36934028.jsonl",
+      "sha256": "495289945269427e0c3946a9ea2ae7fa1d8ef39f81505f1fe11db3be7056d1d2",
+      "trace_sha256": "9cd2441142d59795766fe60536ae090880cfcf0c799fa3f7844b94d0426c38d1",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 1.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-30T10:23:37.419504+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 70,
+            "accuracy": 0.7
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 68,
+          "accuracy": 0.68,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 59,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp1.0-reasoning-off/company/agentic": {
+      "total": 100,
+      "correct": 50,
+      "execution_ok": 92,
+      "errors": 8,
+      "file": "baseline-203cfe583b825741.jsonl",
+      "sha256": "cea3aa8e6285d6f229471a5329e3c7fedcb5aa4ccd3ac262a3b63a5414d8f1cd",
+      "trace_sha256": "d53455fc1a1e2f05565962fa8a9a82be98297a65654705e3694e75cfee490c4d",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 1.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-30T22:09:54.344301+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 63,
+            "accuracy": 0.63
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 64,
+          "accuracy": 0.64,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 50,
+        "execution_ok": 91,
+        "errors": 8
+      }
+    },
+    "results/Qwen--Qwen3.5-27B/temp1.0-reasoning-off/company/single": {
+      "total": 100,
+      "correct": 40,
+      "execution_ok": 98,
+      "errors": 2,
+      "file": "baseline-bbb43ddfa1f9a5ee.jsonl",
+      "sha256": "dbf6a195a1b09fddbaa0a21a69aabeff8447839ad02516577bb64b8091440134",
+      "trace_sha256": "1169587ee4ee6acc4328a1528c96884e855ba64c7653d1e1fda22b637363c9e4",
+      "config": {
+        "model": "Qwen/Qwen3.5-27B",
+        "temperature": 1.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-30T19:23:54.778996+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 52,
+            "accuracy": 0.52
+          }
+        ],
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 50,
+          "accuracy": 0.5,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        },
+        "judge_calls_log": "judge_calls.jsonl"
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 40,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "results/openai--gpt-oss-120b/temp0.0-reasoning-medium/company/agentic": {
+      "total": 100,
+      "correct": 68,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-098b10ed2c9fe846.jsonl",
+      "sha256": "ccd03b83210c068640a63c2f820f66dbbaa19ea518665e52b14031aee9a8ce2f",
+      "trace_sha256": "7de588babef16b9c483c40293afd2e7b5cf8f0c0907ddb66a022533700b62613",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 0.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T03:33:53.494391+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 69,
+            "accuracy": 0.69
+          }
+        ],
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 69,
+          "accuracy": 0.69,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        },
+        "judge_calls_log": "judge_calls.jsonl"
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 68,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "results/openai--gpt-oss-120b/temp0.0-reasoning-medium/company/single": {
+      "total": 100,
+      "correct": 63,
+      "execution_ok": 100,
+      "errors": 0,
+      "file": "baseline-92ef2beaf784dc3a.jsonl",
+      "sha256": "8e95242d614a5406155bce8312842dd3225b968b19268e2e1a0f35a34e80be84",
+      "trace_sha256": "ca56a1a9f2429a9c251587605d384c2ad5a4d52dffe8383cbc9901908e328bb4",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 0.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T02:55:43.318849+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 69,
+            "accuracy": 0.69
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 67,
+          "accuracy": 0.67,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 63,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "results/openai--gpt-oss-120b/temp0.0-reasoning-off/company/agentic": {
+      "total": 100,
+      "correct": 65,
+      "execution_ok": 98,
+      "errors": 2,
+      "file": "baseline-c612d71ef66f555c.jsonl",
+      "sha256": "3700dfc762e2c710f27072985714219f6ad5796641e1c10a3fa9611ff60b4721",
+      "trace_sha256": "b5fb733af845e1d5e9bea4d02136dc391c4434eb4578c4f9fc3060db226571d7",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 0.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T04:31:02.715494+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 70,
+            "accuracy": 0.7
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 70,
+          "accuracy": 0.7,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 65,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "results/openai--gpt-oss-120b/temp0.0-reasoning-off/company/single": {
+      "total": 100,
+      "correct": 66,
+      "execution_ok": 100,
+      "errors": 0,
+      "file": "baseline-87676cbdd6fde271.jsonl",
+      "sha256": "53585cb7d306ed07b1a8e7408eac59b5cfe8f369bc2c3e12521db457829e4120",
+      "trace_sha256": "8bcec8054ddf62507898fbc86dbfb1feece6b35688648414a52215e4cdaffbc1",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 0.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T03:59:30.608544+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 67,
+            "accuracy": 0.67
+          }
+        ],
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 68,
+          "accuracy": 0.68,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        },
+        "judge_calls_log": "judge_calls.jsonl"
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 66,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "results/openai--gpt-oss-120b/temp1.0-reasoning-medium/company/agentic": {
+      "total": 100,
+      "correct": 68,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-8eedf38bc2445824.jsonl",
+      "sha256": "1cda21caf79f4ea5feba6b526a50352eb873c66d4f9a9356c0a71793ff2f91d1",
+      "trace_sha256": "033a19bbe1bfeabca045cedfb28aeded853a61359a86d8e4fcca49625fdf75eb",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 1.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T05:07:40.959919+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 72,
+            "accuracy": 0.72
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 69,
+          "accuracy": 0.69,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 68,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "results/openai--gpt-oss-120b/temp1.0-reasoning-medium/company/single": {
+      "total": 100,
+      "correct": 63,
+      "execution_ok": 98,
+      "errors": 2,
+      "file": "baseline-db5f3ccec7983e96.jsonl",
+      "sha256": "8190fed8c32f505398ea36c1fbc20a63c078015ef61a2c345aa3912635448eaf",
+      "trace_sha256": "bd3ec87b98fa91cdaa0d83a4bfc46e500d75f5e611f91d04db17651a19f8d931",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 1.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T04:54:15.523973+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 68,
+            "accuracy": 0.68
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 68,
+          "accuracy": 0.68,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 63,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "results/openai--gpt-oss-120b/temp1.0-reasoning-off/company/agentic": {
+      "total": 100,
+      "correct": 70,
+      "execution_ok": 100,
+      "errors": 0,
+      "file": "baseline-74c9edec87688544.jsonl",
+      "sha256": "745815fd91989727c166f7186ee26aba4184cb3d2d2780b33ab6e92c68c3f06e",
+      "trace_sha256": "e52c275dc95b26376d3e12b10e4190d422d303adb23e0a7872e1ecf9173ea0ce",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 1.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T05:59:19.487476+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 70,
+            "accuracy": 0.7
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 69,
+          "accuracy": 0.69,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 70,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "results/openai--gpt-oss-120b/temp1.0-reasoning-off/company/single": {
+      "total": 100,
+      "correct": 61,
+      "execution_ok": 100,
+      "errors": 0,
+      "file": "baseline-a9d77abf073ef632.jsonl",
+      "sha256": "20bde4917021846e8bd70c4219672811a484ec07943a41a7bef8b06cbf65453a",
+      "trace_sha256": "1905a30338da48776c7b62f6c7450342ca6ff2c0826217476f79f3f2245e140d",
+      "config": {
+        "model": "openai/gpt-oss-120b",
+        "temperature": 1.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T05:28:38.251272+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 67,
+            "accuracy": 0.67
+          }
+        ],
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 69,
+          "accuracy": 0.69,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        },
+        "judge_calls_log": "judge_calls.jsonl"
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 61,
+        "execution_ok": 99,
+        "errors": 0
+      }
+    },
+    "results/openai--gpt-oss-20b/temp0.0-reasoning-medium/company/agentic": {
+      "total": 100,
+      "correct": 60,
+      "execution_ok": 97,
+      "errors": 3,
+      "file": "baseline-8663135d1e77d35d.jsonl",
+      "sha256": "e2b3eed225fb5bbbc91d6fa0c3663d08a2e0245e69413c0431b7691ffcdce401",
+      "trace_sha256": "c7387778d534eb2002519ef511c2a4bde61b3c2bf59bd7e0ce8859f6ac1f8473",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 0.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T08:11:43.675666+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 55,
+            "accuracy": 0.55
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 56,
+          "accuracy": 0.56,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 60,
+        "execution_ok": 96,
+        "errors": 3
+      }
+    },
+    "results/openai--gpt-oss-20b/temp0.0-reasoning-medium/company/single": {
+      "total": 100,
+      "correct": 64,
+      "execution_ok": 98,
+      "errors": 2,
+      "file": "baseline-acafc1e9be3782df.jsonl",
+      "sha256": "74049dbd17cec1f0c5b1f488166f2ea2feebc421a25a6ae63d6cc4a3e8918e2d",
+      "trace_sha256": "6adfff98a0833a9bfe044f8f8b43e73e6525920d879ee67e6e9245260e058726",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 0.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T06:27:22.418992+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 60,
+            "accuracy": 0.6
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 60,
+          "accuracy": 0.6,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 64,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "results/openai--gpt-oss-20b/temp0.0-reasoning-off/company/agentic": {
+      "total": 100,
+      "correct": 67,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-12ae26937239428c.jsonl",
+      "sha256": "407785518d0f7eec1a94d7f096925cae27545d2401acdc0e79b15bd39be2624c",
+      "trace_sha256": "035f2cc7b3ea3ef11ecbd293606ae6610befa856be526624044c73efaf1a1548",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 0.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T11:25:55.420935+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 61,
+            "accuracy": 0.61
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 62,
+          "accuracy": 0.62,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 67,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "results/openai--gpt-oss-20b/temp0.0-reasoning-off/company/single": {
+      "total": 100,
+      "correct": 66,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-af7e1ae708462b2a.jsonl",
+      "sha256": "5db451bc50d48ee60d304aeb774cc29c9f5691e76c803c21902645de8484566b",
+      "trace_sha256": "ebd4dcaed6a2a313f5355c271d320b984d9297d15a27d4ec07b46bc5e9a22bd2",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 0.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T10:18:52.517350+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 60,
+            "accuracy": 0.6
+          }
+        ],
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 60,
+          "accuracy": 0.6,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        },
+        "judge_calls_log": "judge_calls.jsonl"
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 66,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "results/openai--gpt-oss-20b/temp1.0-reasoning-medium/company/agentic": {
+      "total": 100,
+      "correct": 66,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-142d0e2d4cc015a7.jsonl",
+      "sha256": "b5dbcc496d67307b702d64e3383df83b8d865b2470bb507cff93e868db9cdd98",
+      "trace_sha256": "d3a1ca92c6fefba23ca4b69196acce8c14b1aa975118d9daed7db9fd8caadbf9",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 1.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T13:34:53.434791+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 59,
+            "accuracy": 0.59
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 61,
+          "accuracy": 0.61,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 66,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    },
+    "results/openai--gpt-oss-20b/temp1.0-reasoning-medium/company/single": {
+      "total": 100,
+      "correct": 63,
+      "execution_ok": 97,
+      "errors": 3,
+      "file": "baseline-49692124bb8ca81d.jsonl",
+      "sha256": "05c78a282a6ac6a9f757c94aa72ca37c933178955cfc56b98fe991effefac786",
+      "trace_sha256": "3313221ebed507b308c0b134d6580fa8b4070fe6e824e37bd10975d0c4cea6b8",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 1.0,
+        "reasoning_enabled": true,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T12:13:12.748540+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 63,
+            "accuracy": 0.63
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 63,
+          "accuracy": 0.63,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 63,
+        "execution_ok": 96,
+        "errors": 3
+      }
+    },
+    "results/openai--gpt-oss-20b/temp1.0-reasoning-off/company/agentic": {
+      "total": 100,
+      "correct": 68,
+      "execution_ok": 98,
+      "errors": 2,
+      "file": "baseline-af7f64ccc523c04b.jsonl",
+      "sha256": "98308005663198bcd82547c9542f4431f3bd545209e9b8d9b76d81e8924b57de",
+      "trace_sha256": "997cc9bbeb25cc7b03ae63c5137ef6dbcb8c2e1a935a0daedcaff922c314c65a",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 1.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "agentic"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-10-01T02:06:36.900854+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "agentic",
+            "total": 100,
+            "correct": 62,
+            "accuracy": 0.62
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 61,
+          "accuracy": 0.61,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 68,
+        "execution_ok": 97,
+        "errors": 2
+      }
+    },
+    "results/openai--gpt-oss-20b/temp1.0-reasoning-off/company/single": {
+      "total": 100,
+      "correct": 59,
+      "execution_ok": 99,
+      "errors": 1,
+      "file": "baseline-87211091c87c0ca9.jsonl",
+      "sha256": "b92531620a607c1dd37fed6efb09334ce1a5c15f01ed36b06e5bc8a941dbbb49",
+      "trace_sha256": "dc40fd358f25572562223d912c9cd4062e9c81a6f526c0c19f333b6d0b8a7b41",
+      "config": {
+        "model": "openai/gpt-oss-20b",
+        "temperature": 1.0,
+        "reasoning_enabled": false,
+        "reasoning_effort": "medium",
+        "max_tokens": 32768,
+        "structured_output_mode": "json_schema",
+        "split": "test",
+        "domains": [
+          "company"
+        ],
+        "modes": [
+          "single"
+        ],
+        "graph_variant": "simplekg",
+        "concurrency": 20,
+        "limit": 100,
+        "use_judge": true,
+        "judge_mode": "self",
+        "calls_log": "calls.jsonl",
+        "calls_log_scoped": true,
+        "generated_at": "2026-09-29T15:00:46.440000+00:00",
+        "results": [
+          {
+            "domain": "company",
+            "mode": "single",
+            "total": 100,
+            "correct": 59,
+            "accuracy": 0.59
+          }
+        ],
+        "judge_calls_log": "judge_calls.jsonl",
+        "external_judge": {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "total": 100,
+          "correct": 58,
+          "accuracy": 0.58,
+          "calls_log": "judge_fixed_calls.jsonl",
+          "judge_mode": "fixed"
+        }
+      },
+      "gold_reproduced": {
+        "total": 99,
+        "correct": 59,
+        "execution_ok": 98,
+        "errors": 1
+      }
+    }
+  },
+  "gold": {
+    "total": 100,
+    "correct": 99,
+    "execution_ok": 100,
+    "errors": 0,
+    "non_reproduced_qids": [
+      "8536d1ef-cb04-4bc6-8f9a-4aff1279dc0f"
+    ],
+    "sha256": "14b94c9291d668993cfedbe381172426483b1ac006dbc58916f0cb5f8a0b2d3a"
+  },
+  "snapshot_after": {
+    "nodes": {
+      "count": 581306,
+      "sha256": "8b8da7bfedd360c6c4895e49ab593614e1f949cf6d5ce94eee485ca038713e8b"
+    },
+    "edges": {
+      "count": 299581,
+      "sha256": "d12781227b7e08521aa7b5b12166a5c9332fa87976841ac07e5ab7791b6976b2"
+    }
+  }
+}

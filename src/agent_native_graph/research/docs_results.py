@@ -113,6 +113,7 @@ def render_page(
     navigation: str,
     run_index: str = "",
     explorer: str = "",
+    evidence_summary: str = "",
 ) -> str:
     """Only a dedicated run page receives the explorer scripts and data URL."""
     values = {
@@ -121,6 +122,7 @@ def render_page(
         "MODEL_NAV": navigation,
         "RUN_INDEX": run_index,
         "EXPLORER": explorer,
+        "EVIDENCE_SUMMARY": evidence_summary,
         "SCRIPTS": (
             '<script defer src="assets/results-ui.js"></script>'
             '<script defer src="assets/results.js"></script>'
@@ -129,6 +131,34 @@ def render_page(
         else "",
     }
     return re.sub(r"@@([A-Z_]+)@@", lambda match: values[match[1]], template)
+
+
+def evidence_summary(runs: list[dict[str, Any]]) -> str:
+    """Summarize every archived observation without pooling or selecting a winner."""
+    rows = []
+    for model in sorted({run["manifest"]["model"] for run in runs}):
+        observations = [run for run in runs if run["manifest"]["model"] == model]
+        scores = [run["summary"]["accuracy"] for run in observations]
+        model_page = f"model-{hashlib.sha256(model.encode()).hexdigest()[:16]}.html"
+        rows.append(
+            f'<tr><th><a href="{model_page}">{escape(model)}</a></th>'
+            f"<td>{len(observations)}</td><td>{min(scores):.1%} &ndash; {max(scores):.1%}</td></tr>"
+        )
+    return (
+        '<section aria-labelledby="snapshot-heading"><h2 id="snapshot-heading">'
+        "The evidence at a glance.</h2>"
+        f"<p>{len(runs)} complete runs. Each observation covers the same 347 Company questions.</p>"
+        '<div class="results-table"><table><thead><tr><th>Model</th>'
+        "<th>Archived runs</th><th>Observed exact-match range</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+        "<p>Ranges span different temperature/reasoning configurations and any retained repeats. "
+        "They are neither confidence intervals nor averages. Reasoning is a requested setting, "
+        "not a guaranteed quality improvement; inspect each profile below.</p>"
+        "<p>Historical results are kept separate from opt-in shared-preflight diagnostics. "
+        "The latter verify the live graph and equal initial schema evidence, but are not "
+        "substituted for these archived runs or their historical baseline generations.</p></section>"
+    )
 
 
 def publish_results(root: Path, output: Path, repository_url: str) -> str:
@@ -247,6 +277,7 @@ def publish_results(root: Path, output: Path, repository_url: str) -> str:
         rows="".join(grouped_rows),
         navigation='<div class="model-grid">' + "".join(cards) + "</div>",
         heading="Company, in full.",
+        evidence_summary=evidence_summary(runs),
     )
     (output / "results.html").write_text(page, encoding="utf-8")
     return page

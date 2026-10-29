@@ -85,13 +85,13 @@ not every historical experimental condition identical.
 ### Saved Query Re-execution
 
 The currently selected evaluation,
-`results/cypherbench-company/query-reexecution/2026-10-28-qwen-matrix/`, contains
-a manifest, 100 golden-query executions and sixteen files of 100 baseline-query
-executions. It covers all nine current ANA full runs and all four requested
-Qwen3.5-27B profiles. The previous `2026-10-26/` and `2026-10-28/` evaluations
-remain unchanged as historical evidence. Repeating the ten previously evaluated
-baselines produced the same scores; six newly evaluated baselines complete the
-three new Qwen profile pairs. In total, 1,700 saved queries were attempted with
+`results/cypherbench-company/query-reexecution/2026-10-29-three-model-matrix/`, contains
+a manifest, 100 golden-query executions and twenty-four files of 100 baseline-query
+executions. It covers all thirteen current ANA full runs, including all four
+GPT-OSS-20B profiles. Previous evaluations, including `2026-10-28-qwen-matrix/`,
+remain unchanged as historical evidence. All sixteen previously evaluated
+baseline scores were reproduced; eight newly evaluated baselines complete the
+GPT-OSS-20B matrix. In total, 2,500 saved queries were attempted with
 no model calls. Missing future comparisons are still explicitly marked rather
 than silently borrowing another profile's baseline.
 It is a derived evaluation, not a new LLM run or a copy of the baseline archive.
@@ -141,6 +141,46 @@ Errors remain failures in the full denominator, not exclusions. These exact
 result scores do not replace the original source LLM-judge scores and are not
 the ANA full-split results of 290/347, 273/347 and 292/347. Individual questions
 and the three saved trajectories are available from each comparison page.
+
+For GPT-OSS-20B, all four pinned reference pairs exist and cover the same 100 QIDs:
+
+| GPT-OSS-20B requested profile | ANA exact | Direct Cypher re-executed exact | Multi-agent re-executed exact |
+| --- | ---: | ---: | ---: |
+| temp 0, reasoning off | 60/100 | 66/100 | 67/100 |
+| temp 0, reasoning medium | 62/100 | 64/100 | 60/100 |
+| temp 1, reasoning off | 70/100 | 59/100 | 68/100 |
+| temp 1, reasoning medium | 63/100 | 63/100 | 66/100 |
+
+The direct/multi-agent query-error counts are respectively 1/1, 2/3, 1/2 and
+3/1. ANA does not dominate this matrix: only T1/off beats both baselines.
+These are historical generation comparisons, not shared-preflight experiments.
+No new full-split baseline inference was needed to fill these existing 100-QID
+comparisons; full 347-question, shared-preflight baseline generations remain
+future experiments rather than missing values invented from the subset.
+
+Baseline call logs remain incomplete and expose no uniform token-usage totals.
+The site reports logged baseline calls separately from ANA request counters;
+unknown token costs must not be represented as zero or used for efficiency claims.
+
+### GPT-OSS-20B Request Observability
+
+All means below use the same pinned 100 questions, including failures. ANA
+tokens are the sum of observed prompt plus completion usage from settled
+request accounting, including usage observed before a parsing failure. They
+are not billing estimates and may omit usage from attempts without a response.
+Baseline logged calls exclude the separate judge logs and may omit internal
+evaluator calls, so they cannot support a total-cost ranking.
+
+| Profile | ANA mean LLM calls | ANA mean tool calls | Direct mean logged calls | Multi-agent mean logged calls | ANA observed total tokens |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| T0/none | 6.67 | 6.66 | 2.40 | 6.60 | 15118704 |
+| T0/medium | 6.04 | 6.01 | 2.50 | 7.08 | 13560964 |
+| T1/none | 5.51 | 5.46 | 2.43 | 6.42 | 12407671 |
+| T1/medium | 5.56 | 5.50 | 2.40 | 6.58 | 12660250 |
+
+Baseline token totals and comparable tool-call counters are unavailable, not
+zero. Source logs are pinned with the same commit as the accuracy table; ANA
+usage is in each full archive's per-question `request_accounting` field.
 
 To repeat without LLM calls, with the Company graph already loaded:
 

@@ -117,17 +117,39 @@ Markdown report for every run.
 
 ### Common-Metric Comparison Completed
 
-The selected `2026-10-28-qwen-matrix` query re-execution covers all nine ANA
-archives and sixteen matched external baseline runs on the pinned 100 QIDs.
-It contains 1,700 saved-query attempts including golden queries; no LLM calls
+The selected `2026-10-29-three-model-matrix` query re-execution covers all thirteen ANA
+archives and twenty-four matched external baseline runs on the pinned 100 QIDs.
+It contains 2,500 saved-query attempts including golden queries; no LLM calls
 were made. All queries pass the same read-only query-type gate, timeout and
 result-size policy; queries are not repaired. Graph content matches the dataset
 before execution and remains identical afterwards. Gold reproduction remains
 99/100 and the full denominator is retained.
 
-The ten previously evaluated baseline scores are reproduced unchanged. For
+All sixteen previously evaluated baseline scores are reproduced unchanged. For
 Qwen T0/medium, T1/none and T1/medium, ANA/direct/multi-agent exact scores are
 85/64/67, 79/40/50 and 87/59/62 out of 100. The prior evaluations and full ANA
 archives were not rewritten. Source LLM-judge verdicts stay distinct from this
 query-result comparator, and historical model-generation conditions are still
 not a controlled causal comparison. See the [comparison protocol](multigraphrag-comparison.md).
+
+For GPT-OSS-20B, ANA/direct/multi-agent scores are 60/66/67 at T0/none,
+62/64/60 at T0/medium, 70/59/68 at T1/none and 63/63/66 at T1/medium.
+There is no uniform ANA advantage for this model. Full-split 20B runs share
+execution identities and have settled accounting, but the historical baseline
+generation treatment remains different. Their call logs cannot establish
+complete token costs or efficiency rankings.
+
+### Shared-Preflight Integration Smoke
+
+A separate live diagnostic on October 29 compared synchronous and asynchronous
+preflight evidence and then the artifacts saved by ANA and the reference
+`single` runner. All three evidence objects match exactly: the named Company
+database contains 581,306 nodes and 299,581 relationships, with identical
+content fingerprints and canonical schema/prompt hashes. Both runners completed
+the same three tasks with settled request accounting. ANA matched 3/3 and the
+baseline 2/3; these tiny diagnostic scores are not quality estimates.
+
+Diagnostic artifacts remain local, outside the public full-run archive. This
+is integration validation, not frozen replication evidence; the historical
+347-question and 100-question tables were not relabelled as shared-preflight
+experiments. No graph mutation, prompt tuning or tool-contract change was made.

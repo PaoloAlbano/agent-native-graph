@@ -15,12 +15,17 @@ query, an agent composes bounded tools for schema discovery, entity resolution,
 graph traversal, set operations, aggregation, pagination, and final fetching.
 
 We study a Neo4j-backed implementation on the 347-question Company test split
-of CypherBench. Nine archived runs across GPT-OSS-120B and Qwen3.5-27B obtain
-78.7%-87.0% exact answer matches. A separate comparison on 100 shared questions
+of CypherBench. Thirteen archived runs across GPT-OSS-120B, GPT-OSS-20B and
+Qwen3.5-27B obtain 62.5%-87.0% exact answer matches. GPT-OSS-20B ranges from
+62.5% to 66.0%, below the observed ranges of the other two models; requesting
+medium reasoning does not consistently improve exact matches. A separate comparison on 100 shared questions
 re-executes saved direct and multi-agent text-to-Cypher queries on a verified
 graph, applying the same exact-result comparator to all three approaches.
 For Qwen3.5-27B at temperature 1 with requested medium reasoning, ANA matches
 87/100 answers, versus 59/100 for direct and 62/100 for multi-agent queries.
+GPT-OSS-20B does not reproduce a uniform ANA advantage: its temperature-0,
+reasoning-off observation scores 60/100 versus 66/100 and 67/100, while its
+temperature-1, reasoning-off observation scores 70/100 versus 59/100 and 68/100.
 These are observational comparisons of archived systems, not a controlled
 causal estimate or official full-benchmark CypherBench execution accuracy.
 

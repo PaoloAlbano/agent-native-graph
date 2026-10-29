@@ -7,7 +7,7 @@ The project documentation in `../docs/` explains how to use and reproduce the
 repository. This directory is different: it is the paper-like narrative that
 frames the research question, method, results, and argument.
 
-**Draft status, October 28, 2026:** the results section reports nine complete
+**Draft status, October 29, 2026:** the results section reports thirteen complete
 Company runs and a common-metric comparison on 100 pinned questions. Tables
 link to immutable evidence and are checked against it by tests. This is an
 observational research draft, not a submission-ready claim of causal or
@@ -31,7 +31,7 @@ Markdown file so it can be referenced, reviewed, and edited independently.
 | 4 | [Knowledge Graph QA Case Study](./04-kgqa-case-study.md) | Why graph question answering is the first testbed. |
 | 5 | [Tool Design](./05-tool-design.md) | Tool categories, handles, pagination, and safety boundaries. |
 | 6 | [Experimental Setup](./06-experimental-setup.md) | CypherBench company slice, baselines, models, and metrics. |
-| 7 | [Results](./07-results.md) | All nine full-split observations and the separate shared-100 comparison. |
+| 7 | [Results](./07-results.md) | All thirteen full-split observations and the separate shared-100 comparison. |
 | 8 | [Error Analysis](./08-error-analysis.md) | Failure classes and lessons from tool-call trajectories. |
 | 9 | [Discussion](./09-discussion.md) | What ANA changes compared with text-to-Cypher and MCP-only exposure. |
 | 10 | [Limitations](./10-limitations.md) | Current limits and validity threats. |
@@ -72,7 +72,7 @@ Use these labels when referencing sections from issues, docs, or future papers:
 ## Evidence Checks
 
 Run `uv run pytest tests/test_paper_evidence.py -q` to validate linked results,
-call means, common-metric tables, Qwen failure counts, tool names, worked-example
+call means, common-metric tables, Qwen/GPT-OSS-20B failure counts, tool names, worked-example
 selection/arguments/queries and local links.
 The checks read saved artifacts only; they do not query Neo4j or call a model.
 They validate the reported snapshot rather than automatically inserting future

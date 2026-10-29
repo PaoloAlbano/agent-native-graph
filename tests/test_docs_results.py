@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_native_graph.research.docs_results import ARCHIVE, publish_results, read_runs
+from agent_native_graph.research.docs_results import (
+    ARCHIVE,
+    evidence_summary,
+    publish_results,
+    read_runs,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -93,6 +98,23 @@ def test_publish_preserves_records_and_sources_and_escapes_html(tmp_path):
     assert 'class="question-table"' not in page
     assert 'class="explorer-layout"' not in page
     assert before == {p: p.read_bytes() for p in folder.iterdir()}
+    assert "The evidence at a glance" in page
+    assert "1 complete runs" in page
+    assert "@@EVIDENCE_SUMMARY@@" not in page
+    assert "The evidence at a glance" not in run_page
+
+
+def test_evidence_summary_retains_repeats_and_escapes_model_names():
+    runs = [
+        {"manifest": {"model": "<model>"}, "summary": {"accuracy": score}}
+        for score in (0.6, 0.7, 0.65)
+    ]
+    html = evidence_summary(runs)
+    assert "3 complete runs" in html
+    assert "<td>3</td><td>60.0% &ndash; 70.0%</td>" in html
+    assert "&lt;model&gt;" in html and "<model>" not in html
+    assert "neither confidence intervals nor averages" in html
+    assert "shared-preflight diagnostics" in html
 
 
 def test_standard_run_config_is_validated(tmp_path):
