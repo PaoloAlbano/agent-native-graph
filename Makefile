@@ -1,4 +1,4 @@
-.PHONY: help sync install-mcp format lint test test-backend test-quality test-interfaces prepare-company-tasks load-company export-schema benchmark benchmark-full benchmark-temp1 evaluate archive-result baseline-check baseline-run baseline-archive compare-results list-tools paper docs-build docs-serve serve serve-mcp docker-build docker-run clean
+.PHONY: help sync install-mcp format lint test test-distribution test-backend test-quality test-interfaces prepare-company-tasks load-company export-schema benchmark benchmark-full benchmark-temp1 evaluate archive-result baseline-check baseline-run baseline-archive compare-results list-tools paper docs-build docs-serve serve serve-mcp docker-build docker-run clean
 
 NEO4J_URI ?= bolt://127.0.0.1:7687
 NEO4J_USER ?= neo4j
@@ -30,6 +30,8 @@ BATCH_SIZE ?= 2000
 DOCKER_IMAGE ?= agent-native-graph
 REFERENCE_REPO ?= ../multigraphrag
 REEXECUTION_OUT ?= $(RUN_DIR)/query-reexecution
+EVALUATION_ROOT ?= results/cypherbench-company/query-reexecution
+CONTROLLED_OUT ?= $(RUN_DIR)/controlled-plan.json
 REFERENCE_PYTHON ?= uv run --extra reference python
 BASELINE_MODE ?= direct
 BASELINE_PROFILE ?=
@@ -41,6 +43,8 @@ DOCS_OUT ?= build/site
 DOCS_PUBLIC_URL ?= https://paoloalbano.github.io/agent-native-graph/
 PROFILE ?= temp0-none
 SHARED_PREFLIGHT ?= 0
+RESULT_POLICY ?=
+VERIFY_GRAPH_BLOCK ?= 0
 PROVIDER_TAG ?= openai-compatible
 CHECK_ONLY ?= 0
 
@@ -52,6 +56,8 @@ help:
 	@echo "  make format           Format Python code with ruff"
 	@echo "  make lint             Check Python code with ruff"
 	@echo "  make test             Run all current unit tests"
+	@echo "  make test-reference   Offline pinned-controller tests with fake model/graph"
+	@echo "  make test-distribution  Opt-in wheel/Docker smoke on disposable Neo4j (no LLM)"
 	@echo "  make prepare-company-tasks  Build data/tasks_company_test.jsonl from CypherBench"
 	@echo "  make load-company     Clear/load the CypherBench company graph into Neo4j"
 	@echo "  make export-schema    Export the loaded Company graph schema for benchmarking"
@@ -65,6 +71,8 @@ help:
 	@echo "  make baseline-archive Archive a complete reference run in .local-results/"
 	@echo "  make compare-results  Diagnose matched ANA, direct and agentic runs locally"
 	@echo "  make reexecute-reference  Re-score pinned baseline queries without LLM calls"
+	@echo "  make compact-evaluations  Losslessly compact saved query evaluations (no queries)"
+	@echo "  make controlled-plan  Prepare an offline study draft; never launch inference"
 	@echo "  make list-tools       Print the ANA tool catalog"
 	@echo "  make paper            Print the paper/preprint table of contents"
 	@echo "  make docs-build       Generate the research website and tool reference"
@@ -99,6 +107,15 @@ lint:
 
 test:
 	@uv run pytest tests -q
+
+.PHONY: test-reference
+test-reference:
+	@ANA_TEST_REFERENCE=1 ANA_REFERENCE_REPO="$(abspath $(REFERENCE_REPO))" \
+	  uv run --extra dev --extra reference pytest \
+	  tests/test_reference_foundation.py tests/test_reference_workflows.py tests/test_reference_retrieval.py -q
+
+test-distribution:
+	@ANA_TEST_DISTRIBUTION=1 uv run pytest tests/test_distribution.py -q
 
 test-backend:
 	@ANA_TEST_NEO4J=1 uv run pytest tests/test_agent_tool_backend.py -q
@@ -143,6 +160,8 @@ benchmark:
 	  --schema-json "$(SCHEMA_JSON)" \
 	  --graph-file "$(GRAPH)" --run-dir "$(RUN_DIR)" \
 	  $(if $(filter 1,$(SHARED_PREFLIGHT)),--shared-preflight --database "$(or $(NEO4J_DATABASE),neo4j)",) \
+	  $(if $(RESULT_POLICY),--result-policy "$(RESULT_POLICY)",) \
+	  $(if $(filter 1,$(VERIFY_GRAPH_BLOCK)),--verify-graph-block,) \
 	  $(if $(OUT),--out "$(OUT)",) \
 	  --limit "$(LIMIT)" \
 	  --concurrency "$(CONCURRENCY)" \
@@ -167,6 +186,7 @@ baseline-check:
 	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
 	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
 	  --out "$(BASELINE_OUT)" --check-only \
+	  $(if $(RESULT_POLICY),--result-policy "$(RESULT_POLICY)",) \
 	  $(if $(filter 1,$(SHARED_PREFLIGHT)),--shared-preflight,) \
 	  --neo4j-uri "$(NEO4J_URI)" --neo4j-user "$(NEO4J_USER)" \
 	  --neo4j-password "$(NEO4J_PASSWORD)" --database "$(or $(NEO4J_DATABASE),neo4j)" \
@@ -177,6 +197,8 @@ baseline-run:
 	@PYTHONPATH=src $(REFERENCE_PYTHON) -m agent_native_graph.interfaces.cli baseline-run \
 	  --reference-repo "$(REFERENCE_REPO)" --mode "$(BASELINE_MODE)" \
 	  --out "$(BASELINE_OUT)" --model "$(MODEL)" --base-url "$(BASE_URL)" \
+	  $(if $(filter 1,$(VERIFY_GRAPH_BLOCK)),--verify-graph-block,) \
+	  $(if $(RESULT_POLICY),--result-policy "$(RESULT_POLICY)",) \
 	  $(if $(filter 1,$(SHARED_PREFLIGHT)),--shared-preflight,) \
 	  --api-key-file "$(API_KEY_FILE)" --neo4j-uri "$(NEO4J_URI)" \
 	  --neo4j-user "$(NEO4J_USER)" --neo4j-password "$(NEO4J_PASSWORD)" \
@@ -197,7 +219,15 @@ compare-results:
 	  --ana "$(ANA_RUN)" --direct "$(DIRECT_RUN)" \
 	  --agentic "$(AGENTIC_RUN)" --out "$(COMPARISON_OUT)"
 
-.PHONY: reexecute-reference
+.PHONY: reexecute-reference compact-evaluations controlled-plan
+controlled-plan:
+	@uv run python -m agent_native_graph.research.controlled_plan \
+	  --tasks "$(TASKS)" --graph "$(GRAPH)" --reference-repo "$(REFERENCE_REPO)" \
+	  --out "$(CONTROLLED_OUT)"
+
+compact-evaluations:
+	@uv run python -m agent_native_graph.research.evaluation_storage compact --root "$(EVALUATION_ROOT)"
+
 reexecute-reference:
 	@uv run python -m agent_native_graph.research.reexecute_reference \
 	  --reference-repo "$(REFERENCE_REPO)" --graph "$(GRAPH)" \

@@ -268,6 +268,8 @@ def save_config(args, tasks: list[dict], root: Path) -> dict:
         ),
         "identity": execution_identity(args, root),
     }
+    config["options"]["result_policy"] = getattr(args, "result_policy", None)
+    config["options"]["verify_graph_block"] = getattr(args, "verify_graph_block", False)
     shared = getattr(args, "shared_preflight_artifact", None)
     if shared is not None:
         if shared["graph_sha256"] != inputs["graph"]["sha256"]:

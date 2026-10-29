@@ -173,6 +173,25 @@ def fixture(tmp_path):
     return graph, rows
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_content_only_postcheck_reuses_full_fingerprint_without_schema_queries(
+    fixture, asynchronous
+):
+    graph, rows = fixture
+    driver = Driver(rows, asynchronous=asynchronous)
+    if asynchronous:
+        actual = asyncio.run(
+            preflight.graph_snapshot_async(driver, "benchmark", query_timeout_s=17)
+        )
+    else:
+        actual = preflight.graph_snapshot(driver, "benchmark", query_timeout_s=17)
+    assert actual == preflight.expected_snapshot(graph)
+    assert driver.queries == [preflight._NODES, preflight._EDGES]
+    assert driver.options == [
+        {"database": "benchmark", "default_access_mode": READ_ACCESS, "fetch_size": 2000}
+    ]
+
+
 def test_sync_async_identical_and_value_free(fixture):
     graph, rows = fixture
     result = invoke(rows, graph)

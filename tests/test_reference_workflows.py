@@ -5,9 +5,11 @@ Requires the sibling reference checkout, but makes no network calls or inference
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -219,6 +221,66 @@ def test_real_graph_adapter_caps_preview_not_complete_execution():
         assert "result_row_limit" in outcome.error_message
 
 
+def test_bounded_policy_caps_candidates_but_not_schema_and_records_full_scoring():
+    from agent_native_graph.application.result_policy import (
+        BoundedResults,
+        CandidatePreviewGraph,
+        observe_results,
+    )
+
+    with reference_source(REFERENCE, COMMIT):
+        from multigraphrag.config import MemgraphSettings
+
+        driver = MagicMock()
+        session = driver.session.return_value.__aenter__.return_value
+        session.run = AsyncMock(
+            return_value=SimpleNamespace(
+                consume=AsyncMock(return_value=SimpleNamespace(query_type="r"))
+            )
+        )
+        manager = MagicMock()
+        session.begin_transaction = AsyncMock(return_value=manager)
+        tx = manager.__aenter__.return_value
+
+        async def query(*args, **kwargs):
+            cursor = MagicMock()
+            cursor.keys.return_value = ["n"]
+            cursor.__aiter__.return_value = [
+                SimpleNamespace(values=lambda i=i: [i]) for i in range(25)
+            ]
+            return cursor
+
+        tx.run = query
+        tx.rollback = AsyncMock()
+        graph_type = guarded_graph_class(timeout=30, max_rows=100000, policy=BoundedResults())
+        graph = graph_type(MemgraphSettings(database="neo4j"), driver=driver)
+
+        async def execute():
+            with observe_results() as observations:
+                candidate = await CandidatePreviewGraph(graph).run_query("RETURN 1", max_rows=200)
+                schema = await graph.run_query("RETURN 1", max_rows=1000)
+                result = await run_reference_baseline._score_cypher(
+                    graph,
+                    "RETURN 1",
+                    [[i] for i in range(25)],
+                    SimpleNamespace(
+                        database="neo4j",
+                        query_timeout=30,
+                        max_score_rows=100000,
+                        result_policy="bounded-v1",
+                    ),
+                )
+            return candidate, schema, result, observations
+
+        candidate, schema, result, observations = asyncio.run(execute())
+        assert len(candidate.records) == 20 and candidate.truncated
+        assert len(schema.records) == 25 and not schema.truncated
+        assert result == (True, [[i] for i in range(25)], None)
+        assert [o["phase"] for o in observations] == ["candidate", "introspection", "scoring"]
+        assert all(o["collected_count"] == 25 and o["complete"] for o in observations)
+        assert observations[0]["preview_count"] == 20 and observations[0]["preview_truncated"]
+
+
 @pytest.mark.parametrize(
     "mode,termination,shared",
     [
@@ -230,6 +292,18 @@ def test_real_graph_adapter_caps_preview_not_complete_execution():
         ("direct", "success", True),
         ("single", "success", True),
         ("agentic", "success", True),
+        ("single_retrieval", "success", False),
+        ("agentic_retrieval", "success", False),
+        ("single_retrieval", "success", True),
+        ("agentic_retrieval", "success", True),
+        ("single_retrieval", "timeout", True),
+        ("agentic_retrieval", "cancel", True),
+        ("single_retrieval", "bounded", True),
+        ("agentic_retrieval", "bounded", True),
+        ("single_retrieval", "block_stable", True),
+        ("agentic_retrieval", "block_changed", True),
+        ("single_retrieval", "block_post_error", True),
+        ("agentic_retrieval", "block_cancel", True),
         ("direct", "mismatch", True),
     ],
 )
@@ -237,8 +311,38 @@ def test_harness_records_pinned_profile_run_without_network(
     tmp_path, monkeypatch, mode, termination, shared
 ):
     """Exercise import lifetime, task checks, runner selection and on-disk provenance."""
-    root = Path(__file__).resolve().parents[1]
+    block_case = termination.removeprefix("block_") if termination.startswith("block_") else None
+    if block_case:
+        termination = "cancel" if block_case == "cancel" else "success"
+    bounded = termination == "bounded"
+    if bounded:
+        termination = "success"
     output = tmp_path / "run.jsonl"
+    task = {
+        "qid": "offline-question",
+        "graph": "company",
+        "nl_question": "Return one",
+        "gold_cypher": "RETURN 1 AS n",
+        "answer_json": "[[1]]",
+    }
+    task_file = tmp_path / "tasks.jsonl"
+    task_file.write_text(json.dumps(task) + "\n")
+    graph_file = tmp_path / "graph.json"
+    graph_file.write_text("{}")
+    graph_sha = hashlib.sha256(graph_file.read_bytes()).hexdigest()
+
+    @contextmanager
+    def pinned_with_fake_tasks(*args):
+        # Exercise the real import boundary without requiring ignored dataset downloads.
+        with reference_source(*args) as provenance:
+            from multigraphrag.evaluation import cypherbench
+
+            monkeypatch.setattr(
+                cypherbench, "load_tasks", lambda *a, **kw: [SimpleNamespace(**task)]
+            )
+            yield provenance
+
+    monkeypatch.setattr(run_reference_baseline, "reference_source", pinned_with_fake_tasks)
     monkeypatch.setenv("API_KEY", "test-not-a-real-key")
     monkeypatch.setattr(
         "sys.argv",
@@ -257,12 +361,14 @@ def test_harness_records_pinned_profile_run_without_network(
             "--out",
             str(output),
             "--tasks",
-            str(root / "data/tasks_company_test.jsonl"),
+            str(task_file),
             "--graph",
-            str(root / "downloads/company_simplekg.json"),
+            str(graph_file),
         ],
     )
     args = run_reference_baseline._parse_args()
+    args.result_policy = "bounded-v1" if bounded else None
+    args.verify_graph_block = bool(block_case)
     args.shared_preflight = shared
     canonical = {
         "labels": ["Asset"],
@@ -279,8 +385,11 @@ def test_harness_records_pinned_profile_run_without_network(
         "schema_prompt": bootstrap,
         "schema_sha256": "shared-hash",
         "schema_prompt_sha256": "shared-hash",
-        "snapshot": {"nodes": {"count": 1, "sha256": "n"}, "edges": {"count": 0, "sha256": "e"}},
-        "graph_sha256": "fixture-sha256",
+        "snapshot": {
+            "nodes": {"count": 1, "sha256": "a" * 64},
+            "edges": {"count": 0, "sha256": "b" * 64},
+        },
+        "graph_sha256": graph_sha,
     }
     prepare = AsyncMock(return_value=evidence)
     if termination == "mismatch":
@@ -289,10 +398,47 @@ def test_harness_records_pinned_profile_run_without_network(
     if termination == "timeout":
         args.task_timeout = 0.05
     # File identities and final scoring have separate tests; no large dump or DB IO here.
-    monkeypatch.setattr(run_reference_baseline, "_sha256", lambda path: "fixture-sha256")
-    monkeypatch.setattr(
-        run_reference_baseline, "_score_cypher", AsyncMock(return_value=(True, [[1]], None))
-    )
+    monkeypatch.setattr(run_reference_baseline, "_sha256", lambda path: graph_sha)
+    if block_case:
+        import copy
+
+        import neo4j
+
+        from agent_native_graph.research import common_preflight
+
+        after = copy.deepcopy(evidence["snapshot"])
+        if block_case == "changed":
+            after["edges"]["sha256"] = "c" * 64
+        scan = AsyncMock(return_value=after)
+        if block_case == "post_error":
+            scan.side_effect = RuntimeError("private endpoint must not be retained")
+        monkeypatch.setattr(common_preflight, "graph_snapshot_async", scan)
+        monkeypatch.setattr(neo4j.AsyncGraphDatabase, "driver", MagicMock())
+
+    async def score(*args):
+        if bounded:
+            from agent_native_graph.application.result_policy import (
+                BoundedResults,
+                completeness,
+                record_observation,
+            )
+
+            record_observation(
+                {
+                    "phase": "scoring",
+                    **completeness(
+                        BoundedResults(),
+                        scope="query",
+                        available=1,
+                        collected=1,
+                        preview=1,
+                        complete=True,
+                    ),
+                }
+            )
+        return True, [[1]], None
+
+    monkeypatch.setattr(run_reference_baseline, "_score_cypher", score)
     schema = SimpleNamespace(to_cypher_like_prompt=lambda: "(:Company)")
     monkeypatch.setattr(run_reference_baseline, "_complete_schema", AsyncMock(return_value=schema))
 
@@ -363,6 +509,11 @@ def test_harness_records_pinned_profile_run_without_network(
             run.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await run
+        elif block_case in ("changed", "post_error"):
+            from agent_native_graph.research.graph_integrity import GraphIntegrityError
+
+            with pytest.raises(GraphIntegrityError):
+                await run
         else:
             await run
 
@@ -373,6 +524,18 @@ def test_harness_records_pinned_profile_run_without_network(
         return
     metadata = json.loads(output.with_suffix(".meta.json").read_text())
     row = json.loads(output.read_text())
+    if block_case:
+        report = json.loads(output.with_suffix(".integrity.json").read_text())
+        assert report["status"] == (
+            "verified"
+            if block_case == "stable"
+            else "invalid"
+            if block_case == "changed"
+            else "incomplete"
+        )
+        assert "private endpoint" not in json.dumps(report)
+        scan.assert_awaited_once()
+        assert scan.call_args.args[1] == "neo4j"
     if termination != "success":
         assert not row["ok"] and not row["matches_answer_json"] and stopped.is_set()
         assert ("CancelledError" if termination == "cancel" else "Timeout") in row["error"]
@@ -394,7 +557,27 @@ def test_harness_records_pinned_profile_run_without_network(
     else:
         assert "shared_preflight" not in metadata
     assert metadata["execution_policy"] == "read-only-v1"
-    assert row["ok"] and row["llm_call_count"] == {"direct": 1, "single": 2, "agentic": 3}[mode]
+    if bounded:
+        assert metadata["result_policy"] == "bounded-v1"
+        assert (
+            row["result_completeness"]["complete"]
+            and row["result_completeness"]["scope"] == "query"
+        )
+    assert (
+        row["ok"]
+        and row["llm_call_count"]
+        == {
+            "direct": 1,
+            "single": 2,
+            "agentic": 3,
+            "single_retrieval": 1,
+            "agentic_retrieval": 2,
+        }[mode]
+    )
+    if mode.endswith("_retrieval"):
+        assert metadata["finalization"] == "retrieval-only-v1"
+        assert row["approach"] == f"multigraphrag_{mode}" and row["answer"] is None
+        assert "interpreter" not in row["request_accounting"]["summary"]["roles"]
     accounting = row["request_accounting"]["summary"]
     assert accounting["logical_calls"] == accounting["http_attempts"] == row["llm_call_count"]
     assert accounting["observed_usage_totals"]["total_tokens"] == 11 * row["llm_call_count"]
@@ -405,11 +588,19 @@ def test_harness_records_pinned_profile_run_without_network(
     assert "test-not-a-real-key" not in output.with_suffix(".meta.json").read_text()
     original_calls = Path(metadata["call_logs"][0]).read_bytes()
     args.resume = True
+    if block_case:
+        with pytest.raises(ValueError, match="does not support --resume"):
+            asyncio.run(run_reference_baseline._run(args))
+        return
     asyncio.run(run_reference_baseline._run(args))
     resumed = json.loads(output.with_suffix(".meta.json").read_text())
     assert len(set(resumed["call_logs"])) == 2
     assert Path(metadata["call_logs"][0]).read_bytes() == original_calls
     assert json.loads(output.read_text()) == row
+    args.result_policy = None if bounded else "bounded-v1"
+    with pytest.raises(ValueError, match="metadata field result_policy differs"):
+        asyncio.run(run_reference_baseline._run(args))
+    args.result_policy = "bounded-v1" if bounded else None
     args.database = "changed"
     with pytest.raises(ValueError, match="metadata field database differs"):
         asyncio.run(run_reference_baseline._run(args))

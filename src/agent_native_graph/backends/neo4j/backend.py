@@ -22,6 +22,7 @@ from agent_native_graph.core.graph_utils import (
     _distinctive_entity_search_tokens,
     _entity_vars,
     _expand_projected_rows,
+    _extract_handle_refs,
     _handle_entity_vars,
     _handle_var_labels,
     _inferred_type,
@@ -70,6 +71,7 @@ from agent_native_graph.core.graph_utils import (
 )
 from agent_native_graph.core.handle_store import HandleStore
 from agent_native_graph.core.tooling import call_registered_tool
+from agent_native_graph.domain.entities import entity_identity, entity_references
 from agent_native_graph.domain.handles import Handle
 from agent_native_graph.tools import load_tool_modules
 
@@ -89,7 +91,13 @@ class Neo4jGraphBackend(AgentGraphBackend):
         schema_entry: str = "overview",
         database: str | None = None,
         handle_store: HandleStore | None = None,
+        identity_mode: str = "property",
+        workflow_timeout_s: int = 30,
     ) -> None:
+        if identity_mode not in {"property", "transaction"}:
+            raise ValueError("identity_mode must be property or transaction")
+        if type(workflow_timeout_s) is not int or workflow_timeout_s <= 0:
+            raise ValueError("workflow_timeout_s must be a positive integer")
         super().__init__(handle_store=handle_store)
         load_tool_modules()
         self._driver = GraphDatabase.driver(
@@ -101,11 +109,38 @@ class Neo4jGraphBackend(AgentGraphBackend):
         self._database = database
         self._closed = False
         self.last_fetch: list[list[Any]] | None = None
+        self._identity = None
+        if identity_mode == "transaction":
+            from agent_native_graph.backends.neo4j.identity import TransactionIdentity
+
+            self._identity = TransactionIdentity(
+                self._driver,
+                database,
+                min(workflow_timeout_s, query_timeout_s or workflow_timeout_s),
+                self._handle_store.clear,
+            )
 
     def _session(self) -> Any:
         """Route every query to the configured database; preserve the driver default if unset."""
         database = getattr(self, "_database", None)
+        if getattr(self, "_identity", None) is not None:
+            return self._identity.queries()
         return self._driver.session(**({"database": database} if database is not None else {}))
+
+    def _entity_key(self, value):
+        """Use workflow provenance in opt-in mode, or the historical property ID."""
+        identity = getattr(self, "_identity", None)
+        return identity.key(value) if identity is not None else entity_identity(value)
+
+    def _identity_expr(self, var):
+        """Build only internal identity predicates; user property filters stay untouched."""
+        return f"elementId({var})" if getattr(self, "_identity", None) is not None else f"{var}.id"
+
+    def _bound_match(self, var, parameter):
+        """Bind a node without interpreting its application id as engine identity."""
+        if getattr(self, "_identity", None) is not None:
+            return f"MATCH ({var}) WHERE elementId({var}) = {parameter} "
+        return f"MATCH ({var} {{id: {parameter}}}) "
 
     def _ensure_handle_store(self) -> HandleStore:
         if not hasattr(self, "_handle_store"):
@@ -139,12 +174,19 @@ class Neo4jGraphBackend(AgentGraphBackend):
     def close(self) -> None:
         """Close this workflow once; its handles cannot be used afterwards."""
         if not getattr(self, "_closed", False):
-            self._driver.close()
-            self._closed = True
+            try:
+                if getattr(self, "_identity", None) is not None:
+                    try:
+                        self._identity.close()
+                    finally:
+                        self._handle_store.clear()
+            finally:
+                self._driver.close()
+                self._closed = True
 
     def _run(self, session: Any, query: str, **params: Any) -> Any:
         statement: str | Query
-        if self._query_timeout_s:
+        if self._query_timeout_s and getattr(self, "_identity", None) is None:
             statement = Query(query, timeout=self._query_timeout_s)
         else:
             statement = query
@@ -153,7 +195,16 @@ class Neo4jGraphBackend(AgentGraphBackend):
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
         if getattr(self, "_closed", False):
             raise RuntimeError("Graph backend is closed")
-        result = self._call_impl(tool, args)
+        identity = getattr(self, "_identity", None)
+        if identity is None:
+            result = self._call_impl(tool, args)
+        else:
+            with identity.scope(), entity_references(identity.reference):
+                refs = _extract_handle_refs(args)
+                if isinstance(args.get("seed_from"), str):
+                    refs.append(args["seed_from"])
+                identity.validate([self._handle_store.get(handle_id) for handle_id in set(refs)])
+                result = self._call_impl(tool, args)
         self._record_handle_lineage(tool, args, result)
         return result
 
@@ -927,11 +978,13 @@ class Neo4jGraphBackend(AgentGraphBackend):
             return self._store([{alias: server_side_count}], kind="table", columns=[alias])
         if var:
             values = [
-                row[str(var)]["properties"].get("id")
+                self._entity_key(row[str(var)])
                 for row in handle.rows
                 if str(var) in row and isinstance(row[str(var)], dict)
             ]
             count = len(set(values)) if distinct else len(values)
+        elif distinct and getattr(self, "_identity", None) is not None:
+            count = len(_distinct_rows(handle.rows, use_references=True))
         else:
             keys = {
                 json.dumps(row, ensure_ascii=False, sort_keys=True, default=str)
@@ -1033,7 +1086,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         input_rows = [
             {
                 "row_index": index,
-                "source_id": row[source_var]["properties"]["id"],
+                "source_id": self._entity_key(row[source_var]),
                 "rel_ids": list(row.get("__rel_ids", [])),
             }
             for index, row in enumerate(source_handle.rows)
@@ -1064,9 +1117,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             raise ValueError(f"Unsupported direction: {direction}")
 
         query = (
-            "UNWIND $rows AS row "
-            "MATCH (s {id: row.source_id}) "
-            f"MATCH {pattern} "
+            "UNWIND $rows AS row " + self._bound_match("s", "row.source_id") + f"MATCH {pattern} "
             "WHERE NOT elementId(r) IN row.rel_ids "
             "RETURN row.row_index AS row_index, elementId(r) AS rel_id, t LIMIT $limit"
         )
@@ -1090,9 +1141,9 @@ class Neo4jGraphBackend(AgentGraphBackend):
         source_ids = sorted({row["source_id"] for row in input_rows})
         count_query = (
             "UNWIND $source_ids AS source_id "
-            "MATCH (s {id: source_id}) "
-            f"MATCH {pattern} "
-            "RETURN t.id AS entity_id"
+            + self._bound_match("s", "source_id")
+            + f"MATCH {pattern} "
+            f"RETURN {self._identity_expr('t')} AS entity_id"
         )
         metadata = {
             "server_side_entity_query": {
@@ -1123,7 +1174,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         direction = str(args.get("direction", "out"))
         limit = _int_arg(args, "limit", 1000, min_value=1)
         source_nodes = [row[source_var] for row in source_handle.rows if source_var in row]
-        source_ids = [node["properties"]["id"] for node in source_nodes]
+        source_ids = [self._entity_key(node) for node in source_nodes]
         if not source_ids:
             return self._store([], kind="table", columns=[])
         source_label = _safe_name(
@@ -1153,7 +1204,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             raise ValueError("expand_aggregate requires group_by and/or metrics")
         query = (
             f"MATCH ({source_var}:`{source_label}`) "
-            f"WHERE {source_var}.id IN $source_ids "
+            f"WHERE {self._identity_expr(source_var)} IN $source_ids "
             f"MATCH {pattern} "
             f"RETURN {', '.join(return_exprs)} "
             "LIMIT $limit"
@@ -1194,7 +1245,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         for index, row in enumerate(source_handle.rows):
             if source_var not in row or not _is_node_payload(row[source_var]):
                 continue
-            source_id = row[source_var]["properties"]["id"]
+            source_id = self._entity_key(row[source_var])
             if source_id in seen_source_ids:
                 continue
             seen_source_ids.add(source_id)
@@ -1217,7 +1268,11 @@ class Neo4jGraphBackend(AgentGraphBackend):
 
         count_expr = "count(DISTINCT t)" if distinct else "count(t)"
         params = {"rows": input_rows}
-        query = f"UNWIND $rows AS row MATCH (s {{id: row.source_id}}) OPTIONAL MATCH {pattern} "
+        query = (
+            "UNWIND $rows AS row "
+            + self._bound_match("s", "row.source_id")
+            + f"OPTIONAL MATCH {pattern} "
+        )
         if exclude_traversed_relationships:
             query += "WHERE r IS NULL OR NOT elementId(r) IN row.rel_ids "
         query += f"RETURN row.row_index AS row_index, {count_expr} AS related_count "
@@ -1272,12 +1327,12 @@ class Neo4jGraphBackend(AgentGraphBackend):
         if source_handle_id:
             source_handle = self._handle(str(source_handle_id))
             source_ids = [
-                row[current_var]["properties"]["id"]
+                self._entity_key(row[current_var])
                 for row in source_handle.rows
                 if current_var in row
             ]
             params["source_ids"] = source_ids
-            query_parts.append(f"WHERE {current_var}.id IN $source_ids")
+            query_parts.append(f"WHERE {self._identity_expr(current_var)} IN $source_ids")
 
         relationship_filters: list[dict[str, Any]] = []
         for index, hop in enumerate(hops):
@@ -1549,12 +1604,12 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 ],
             )
             source_ids = [
-                row[current_var]["properties"]["id"]
+                self._entity_key(row[current_var])
                 for row in source_handle.rows
                 if current_var in row
             ]
             params["source_ids"] = source_ids
-            query_parts.append(f"WHERE {current_var}.id IN $source_ids")
+            query_parts.append(f"WHERE {self._identity_expr(current_var)} IN $source_ids")
 
         relationship_filters: list[dict[str, Any]] = []
         relationship_vars: list[str] = []
@@ -1622,7 +1677,9 @@ class Neo4jGraphBackend(AgentGraphBackend):
         query += f" RETURN {distinct_kw}{', '.join(return_items)}"
         count_query = None
         if default_focus:
-            count_query = " ".join(query_parts) + f" RETURN {default_focus}.id AS entity_id"
+            count_query = (
+                " ".join(query_parts) + f" RETURN {self._identity_expr(default_focus)} AS entity_id"
+            )
         order_by = _safe_cypher_order_by(args)
         if order_by:
             query += f" ORDER BY {order_by}"
@@ -1940,7 +1997,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             }
             metadata = {
                 "server_side_entity_query": {
-                    "query": f"{base_query} RETURN {find_var}.id AS entity_id",
+                    "query": f"{base_query} RETURN {self._identity_expr(find_var)} AS entity_id",
                     "params": count_params,
                     "var": find_var,
                     "label": find_label,
@@ -2010,12 +2067,12 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 ],
             )
             source_ids = [
-                row[current_var]["properties"]["id"]
+                self._entity_key(row[current_var])
                 for row in source_handle.rows
                 if current_var in row
             ]
             params["source_ids"] = source_ids
-            query_parts.append(f"WHERE {current_var}.id IN $source_ids")
+            query_parts.append(f"WHERE {self._identity_expr(current_var)} IN $source_ids")
 
         where_parts: list[str] = []
         for index, flt in enumerate(_as_list(args.get("filters"))):
@@ -2249,7 +2306,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             filter_index += 1
         if where_parts:
             query_parts.append("WHERE " + " AND ".join(where_parts))
-        query_parts.append(f"RETURN {return_var}.id AS entity_id")
+        query_parts.append(f"RETURN {self._identity_expr(return_var)} AS entity_id")
         return " ".join(query_parts), params, contexts[return_var]["label"], filter_index
 
     def _validate_entity_set_operands(self, operands: list[Any]) -> None:
@@ -2503,7 +2560,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             for row in handle.rows
             if left_var in row
             and right_var in row
-            and row[left_var]["properties"].get("id") == row[right_var]["properties"].get("id")
+            and self._entity_key(row[left_var]) == self._entity_key(row[right_var])
         ]
         return self._store(rows, focus=handle.focus)
 
@@ -2525,7 +2582,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 "relationships between different labels."
             )
         right_by_id = {
-            row[right_var]["properties"]["id"]: row
+            self._entity_key(row[right_var]): row
             for row in right.rows
             if right_var in row and isinstance(row[right_var], dict)
         }
@@ -2533,7 +2590,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         for row in left.rows:
             if left_var not in row or not isinstance(row[left_var], dict):
                 continue
-            item_id = row[left_var]["properties"].get("id")
+            item_id = self._entity_key(row[left_var])
             matched = item_id in right_by_id
             if op == "inner" and matched:
                 merged = dict(row)
@@ -2706,12 +2763,16 @@ class Neo4jGraphBackend(AgentGraphBackend):
             output = [_strip_project_hidden_order_keys(row) for row in output]
         if select and not keep_entities:
             if distinct:
-                output = _distinct_rows(output)
+                output = _distinct_rows(
+                    output, use_references=getattr(self, "_identity", None) is not None
+                )
             result = self._store(output, kind="table", columns=_columns(output))
             result["finalization_hint"] = True
             return result
         if select and keep_entities and distinct:
-            output = _distinct_rows(output)
+            output = _distinct_rows(
+                output, use_references=getattr(self, "_identity", None) is not None
+            )
         selected_entity_vars = sorted(
             {
                 str(item.get("var"))
@@ -2809,7 +2870,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         where_parts: list[str] = []
         if seed_handle is not None:
             seed_ids = [
-                row[seed_var]["properties"]["id"]
+                self._entity_key(row[seed_var])
                 for row in seed_handle.rows
                 if _is_node_payload(row.get(seed_var))
             ]
@@ -2820,7 +2881,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
                     f"{_handle_entity_vars(seed_handle.rows)}"
                 )
             params["seed_ids"] = seed_ids
-            where_parts.append(f"{seed_var}.id IN $seed_ids")
+            where_parts.append(f"{self._identity_expr(seed_var)} IN $seed_ids")
         filter_index = 0
         for section in ("seed_filters", "shared_filters", "peer_filters"):
             for flt in _as_list(args.get(section)):
@@ -2836,7 +2897,9 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 params.update(clause_params)
                 filter_index += 1
         if _bool_arg(args.get("exclude_seed", True)) and seed_label == peer_label:
-            where_parts.append(f"{seed_var}.id <> {peer_var}.id")
+            where_parts.append(
+                f"{self._identity_expr(seed_var)} <> {self._identity_expr(peer_var)}"
+            )
 
         self._validate_projection_context_properties(
             args, contexts, context="shared_role_aggregate"
@@ -2894,12 +2957,12 @@ class Neo4jGraphBackend(AgentGraphBackend):
         right_var = str(args.get("right_var") or right.focus)
         out_var = str(args.get("as") or left_var)
         left_by_id = {
-            row[left_var]["properties"]["id"]: row
+            self._entity_key(row[left_var]): row
             for row in left.rows
             if _is_node_payload(row.get(left_var))
         }
         right_by_id = {
-            row[right_var]["properties"]["id"]: row
+            self._entity_key(row[right_var]): row
             for row in right.rows
             if _is_node_payload(row.get(right_var))
         }
@@ -3055,7 +3118,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             and str(args.get("distinct_scope") or "entity").lower() != "scalar"
         )
         if scalar_distinct:
-            rows = _distinct_rows(rows)
+            rows = _distinct_rows(rows, use_references=getattr(self, "_identity", None) is not None)
         if args.get("limit") is not None:
             rows = rows[: int(args["limit"])]
         columns = [item.get("alias") or f"{item['var']}.{item['property']}" for item in select]

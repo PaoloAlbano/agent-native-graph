@@ -19,10 +19,12 @@ cypherbench-company/
     failures.jsonl
     run.jsonl
     run-config.json  # new runs; historical archives retain four files
+    graph-integrity.json  # only when before/after block verification is enabled
   query-reexecution/<evaluation_id>/
     manifest.json
-    gold.jsonl
-    baseline-*.jsonl
+    storage.json
+  query-reexecution/_objects/
+    <sha256>.jsonl.gz
 ```
 
 ## Full ANA Runs
@@ -39,6 +41,15 @@ sidecar: it includes local input paths. Historical archives are preserved as
 recorded, without inventing missing provenance. A declared historical commit
 alone does not prove the exact uncommitted code used at inference time.
 
+Optional before/after verification creates a separate raw `.integrity.json`
+sidecar; it does not mutate the saved model configuration or question records.
+When declared in configuration, archiving requires a verified, complete block
+with matching raw/configuration hashes. Its archived `graph-integrity.json` is
+checksummed in the manifest and validated by the site. Invalid/incomplete/running
+reports remain local diagnostics, never publishable graph-verified results.
+See [block verification](../docs/reproduction.md#beforeafter-graph-block-verification)
+for opt-in flags, interruption policy and non-snapshot limitations.
+
 Follow [Contribute a Company Run](../docs/run-standard.md) to launch and archive
 results. Keep incomplete, retry-only, small-sample and exploratory outputs
 outside this archive. The archiver preserves original temporary output.
@@ -47,8 +58,30 @@ outside this archive. The archiver preserves original temporary output.
 
 `query-reexecution/` stores complete evaluations of saved baseline Cypher,
 not new LLM runs. The evaluation manifest pins source traces, QIDs, graph
-fingerprints, scoring provenance and artifact checksums. Its JSONL files retain
+fingerprints, scoring provenance and artifact checksums. Its logical JSONL files retain
 queries, returned rows, execution errors and exact-match verdicts.
+
+Complete evaluations use `ana-query-records-v1` compact storage. Each evaluation's
+`storage.json` records ordered references and original execution times. Shared
+gzip packs in `_objects/` contain identical records only once, excluding only
+`elapsed_s` from the shared record. These packs are evidence, not disposable caches.
+Manifests and their original JSONL checksums are unchanged. Reads reconstruct and
+verify the exact original bytes, including row order, errors and execution times.
+Legacy standalone JSONL directories remain readable.
+
+```bash
+# Compact existing complete evaluations; no database or LLM requests.
+make compact-evaluations
+# Export one portable standalone evaluation; destination must not exist.
+uv run python -m agent_native_graph.research.evaluation_storage export \
+  results/cypherbench-company/query-reexecution/2026-10-29-three-model-matrix \
+  --out /tmp/ana-evaluation-export
+```
+
+Keep each index with its referenced shared packs. Do not copy only an evaluation
+directory to another archive: export it first, then optionally compact it at its
+destination. Migration never changes Git history and does not delete shared packs.
+Run compaction only when no process is modifying the selected evaluations.
 
 Original external baseline archives remain in the pinned reference repository;
 they are not copied here. Their LLM-judge verdicts and the re-executed exact-result

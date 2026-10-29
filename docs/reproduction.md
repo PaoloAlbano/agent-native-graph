@@ -168,7 +168,7 @@ resume, including an old sidecar without these fields.
 With `BASELINE_PROFILE`, every reference role uses ANA's provider, call settings,
 timeouts and HTTP retry policy; profile settings override the legacy generation
 flags. Structured generation still uses the pinned reference JSON parser
-(including its existing recovery rules). The reference workflows, including the
+(including its existing recovery rules). The original `single` and `agentic` workflows, including the
 prose interpreter, are unchanged. The profile path never restarts a whole question
 on HTTP 429; only the shared provider retries the request. Without a profile,
 the reference's legacy LLM client and workflow-level retries remain available
@@ -183,11 +183,176 @@ not a replacement for database read-only credentials and procedure permissions.
 
 This is **foundation-only**, not compliance with the
 [controlled Company protocol](controlled-company-protocol.md). Shared generation
-budgets, global HTTP concurrency, common approved deadline values,
-retrieval-only variants and full observation parity still require implementation.
+budget experiments, global HTTP concurrency, common approved deadline values
+and full observation parity still require separate work. Retrieval-only variants
+are implemented as the explicit opt-in modes below.
 The opt-in preflight below provides before-run verification and equal initial
 schema facts only, not the complete matched-condition protocol.
 No historical results are rewritten by these commands.
+
+### Retrieval-Only Reference Variants
+
+Two explicit research modes, `single_retrieval` and `agentic_retrieval`, use the
+same pinned controllers but replace only the terminal prose interpreter with a
+stateless local finalizer. They require a YAML profile and reference commit
+`72fe7105310c85ebe6b1b3b7d4c6152ddb206393`; other revisions are rejected until
+their control flow is validated. The reference checkout is never modified.
+
+`single_retrieval` retains the original bounded retries after execution errors
+or empty results. `agentic_retrieval` retains generation, semantic evaluation,
+entity extraction/verification, ranking, correction and aggregation. All native
+iteration limits and feedback stay unchanged. `direct` is still the separate
+one-generation baseline, not an alias for either new mode.
+
+Per-question `answer` is `null`, and the metadata records
+`finalization: retrieval-only-v1` with a distinct mode/approach. Only the final
+query selected by the original controller is replayed through the existing
+bounded read-only scorer to collect complete rows. That replay is database
+work, not another model decision; its errors/row-cap failures are not scored
+as partial successes. No earlier candidate is chosen using the gold answer.
+The controller's `accepted` flag remains diagnostic, not a correctness judge:
+it can reject a query whose rows are correct or accept a wrong one. Exhaustion
+keeps the original final candidate and iteration count, never an invented answer.
+
+Verify actual pinned-controller parity without database or inference calls:
+
+```bash
+make test-reference REFERENCE_REPO=../multigraphrag
+```
+
+This needs the local pinned source and reference dependencies (Python 3.12+).
+Tests compare every generated prompt/response and graph observation against the
+original workflow, excluding only its final interpreter call. They cover blind
+retries, semantic correction, both entity-verification branches, ranking,
+iteration exhaustion, request accounting, cancellation and resume identity.
+
+Only after approving an inference experiment, select a variant through the
+existing command, for example:
+
+```bash
+make baseline-run BASELINE_MODE=single_retrieval BASELINE_PROFILE=temp0-none \
+  REFERENCE_COMMIT=72fe7105310c85ebe6b1b3b7d4c6152ddb206393 \
+  SHARED_PREFLIGHT=1 MODEL=<model-id> BASELINE_OUT=<new-output.jsonl>
+```
+
+Use `BASELINE_MODE=agentic_retrieval` for the multi-agent variant. These are new
+treatments, not replacements for historical runs or automatic additions to the
+published comparison. Their common feedback policy/global resource controls
+remain pending in the [controlled protocol](controlled-company-protocol.md).
+
+### Opt-In Bounded Result Policy
+
+`RESULT_POLICY=bounded-v1` is a separate experimental treatment, disabled by
+default for ANA and baseline commands. It does not edit tool definitions,
+system instructions or the reference controllers. Select it explicitly on
+both arms of a newly approved experiment, never when resuming a historical run:
+
+```bash
+# Examples only; these commands launch inference when credentials are configured.
+make benchmark MODEL=<model-id> PROFILE=temp0-none RESULT_POLICY=bounded-v1
+make baseline-run MODEL=<model-id> BASELINE_MODE=single_retrieval \
+  BASELINE_PROFILE=temp0-none RESULT_POLICY=bounded-v1 \
+  REFERENCE_COMMIT=72fe7105310c85ebe6b1b3b7d4c6152ddb206393
+```
+
+The common limits are **100,000 collected rows** and **at most 20 preview rows**.
+Baseline mode requires a pinned profile and rejects a contradictory
+`--max-score-rows`. The candidate result shown to its controller is capped at
+20; entity verification and schema discovery keep their original per-query
+limits so that schema facts are not silently sampled. ANA intermediate previews
+retain their historical, sometimes smaller size; this is a shared ceiling,
+not a claim that each arm observes the same number of rows.
+
+ANA collects only the stored handle explicitly finalized by the model. If its
+fetch is one page, even a later/final page, evaluation may issue one additional
+bounded fetch from offset zero. The recorded `evaluation_collection` flag marks
+that extra data access. This supersedes the historical unbounded
+`--evaluation-fetch-all-pages` helper in this policy. It never selects another
+handle, generates a final fetch when the model did not request one, or repairs
+an earlier tool limit. Paging is delivery, not semantic top-k: express intended
+selection in the query/handle rather than expecting the fetch page size to be
+the answer definition. Invalid, changed, incomplete or over-cap pages cannot
+leave a partial `last_fetch` available for successful scoring. No final fetch
+cannot exactly match an empty gold answer under this policy.
+`done` is rejected as a tool error rather than converted into a fetch; the
+model may still request `fetch` in a remaining decision turn. The legacy
+end-of-budget automatic fetch is also disabled, even if its legacy option was
+enabled. Both historical fallbacks remain unchanged when this policy is absent.
+
+Baseline evaluation still replays its controller's final query using the bounded
+read-only scorer, not its preview. Over-cap results fail without retaining a
+prefix. `result_observations` records candidate/introspection/scoring coverage
+separately for each question, including asynchronous child roles. This metadata
+is archived, not inserted into model instructions. The reference evaluator's
+existing "possibly truncated" wording is unchanged; equal explicit coverage
+information in all controller observations remains future G5 work.
+
+`result_completeness` separates `available_count`, `collected_count`,
+`preview_count` and `preview_truncated`. Its `complete` flag means collection
+of the named scope only: a stored ANA handle or one baseline Cypher query.
+**It does not certify that the answer covers the entire graph.** Upstream
+coverage is `unknown` for ANA handles, since operations may have applied limits;
+a model's semantic `LIMIT` also remains part of its query, not a transport error.
+Failed/unfinished collection is not scored as a complete answer.
+
+The policy is saved in both run configurations; changing it rejects resume.
+The ANA archiver routes these exploratory runs to `.local-results/` by default,
+including complete 347-QID runs, to avoid pairing a new treatment with historical
+baselines. Keep them separate until a new publication protocol is approved.
+This slice does not implement after-block graph certification, a snapshot,
+global resource admission or production-server quotas.
+
+### Before/After Graph Block Verification
+
+`VERIFY_GRAPH_BLOCK=1 SHARED_PREFLIGHT=1` opts ANA `make benchmark` and
+`make baseline-run` into the same integrity check. The CLI flag is
+`--verify-graph-block`. Default/historical runs remain unchanged. A block here
+is **one fresh runner invocation**, not one question or the entire proposed
+matrix. Baseline mode also requires its pinned profile through shared preflight.
+No graph is loaded, cleared or changed automatically.
+
+The initial shared preflight verifies the loaded named database against the
+Company dump. After all local question tasks/requests settle and result writers
+close, a content-only scan reads all node labels/properties and all relationship
+types/properties/endpoints. The same multiset fingerprint includes duplicate
+multiplicity, not only counts. These verification scans use the preflight's
+300-second per-query timeout, not the per-question 30-second query timeout;
+they are block overhead, not model-request latency.
+
+The runner creates `<raw-stem>.integrity.json` before execution with
+`status: running`, then atomically seals it as:
+
+- `verified`: equal before/after content, unchanged dump/configuration, and the
+  exact expected QID set with no omissions or duplicates.
+- `invalid`: graph content, dump bytes or configuration changed.
+- `incomplete`: execution failed/interrupted, coverage is incomplete, evidence
+  cannot be read, or the postcheck fails. A process crash may leave `running`,
+  which is also not eligible for archiving.
+
+Any unsuccessful seal causes a normally completed runner to fail explicitly.
+If the benchmark already raised an exception/cancellation, its original failure
+is preserved. Raw answers and call logs are retained unchanged for diagnosis;
+successful per-question scores do not override an invalid block. Error evidence
+contains exception types, not connection strings or exception messages.
+
+The sidecar binds exact raw-result and source-configuration SHA-256 values,
+QID coverage, the named database, and before/after fingerprints. Both archivers
+require verified evidence when the configuration declares this feature, copy
+it as `graph-integrity.json`, and record its checksum in the manifest. The
+static site checks that evidence too, without contacting Neo4j. Historical
+archives without this feature need no invented verification report.
+
+`--resume` and `--check-only` are deliberately rejected for a verified block;
+use a fresh output for a new attempt and retain interrupted evidence locally.
+Combining separately verified resumed segments is not implemented. Existing
+resume behavior without this feature is unchanged. All checks are read-only.
+
+**Limits:** two endpoint fingerprints do not exclude concurrent writers,
+provide snapshot isolation, or detect a transient change later restored to
+identical content. Keep the graph externally read-only during the experiment.
+A verified report certifies only its declared graph/coverage checks, not every
+gate of the controlled protocol. Equal explicit completeness information and
+global execution/resource limits remain separate work.
 
 ### Opt-In Common Graph And Schema Preflight
 

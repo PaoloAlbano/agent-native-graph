@@ -6,6 +6,7 @@ from typing import Any
 
 from neo4j.graph import Node, Relationship
 
+from agent_native_graph.domain.entities import EntityPayload, attach_reference, entity_identity
 from agent_native_graph.domain.handles import Handle
 
 __all__ = [
@@ -119,7 +120,7 @@ def _row_property(row: dict[str, Any], var: str, prop: str) -> Any:
 def _metric_identity(row: dict[str, Any], var: str) -> Any:
     value = row.get(var)
     if _is_node_payload(value):
-        return value["properties"]["id"]
+        return entity_identity(value)
     if isinstance(value, dict):
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
     return value
@@ -634,10 +635,13 @@ def _schema_path_payload(
 
 
 def _node_payload(node: Any) -> dict[str, Any]:
-    return {
-        "labels": sorted(node.labels),
-        "properties": {str(key): _tool_value(value) for key, value in dict(node).items()},
-    }
+    return attach_reference(
+        {
+            "labels": sorted(node.labels),
+            "properties": {str(key): _tool_value(value) for key, value in dict(node).items()},
+        },
+        node,
+    )
 
 
 def _tool_value(value: Any) -> Any:
@@ -675,7 +679,7 @@ def _is_node_payload(value: Any) -> bool:
     return (
         isinstance(value, dict)
         and isinstance(value.get("properties"), dict)
-        and "id" in value["properties"]
+        and (isinstance(value, EntityPayload) or "id" in value["properties"])
     )
 
 
@@ -799,7 +803,11 @@ def _distinct_rows_by_selected_entities(
             if not _is_node_payload(value):
                 continue
             props = value.get("properties", {})
-            entity_id = props.get("id") or props.get("name")
+            entity_id = (
+                entity_identity(value)
+                if isinstance(value, EntityPayload)
+                else props.get("id") or props.get("name")
+            )
             if entity_id is not None:
                 key_parts.append((var, str(entity_id)))
         if not key_parts:
@@ -1358,11 +1366,27 @@ def _handle_entity_vars(rows: list[dict[str, Any]]) -> list[str]:
     return sorted(found)
 
 
-def _distinct_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _distinct_rows(
+    rows: list[dict[str, Any]], *, use_references: bool = False
+) -> list[dict[str, Any]]:
+    def identity_value(value):
+        if isinstance(value, EntityPayload):
+            return {"__ana_reference": [value.reference.owner, value.reference.key]}
+        if isinstance(value, dict):
+            return {key: identity_value(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [identity_value(item) for item in value]
+        return value
+
     seen: set[str] = set()
     out = []
     for row in rows:
-        key = json.dumps(row, ensure_ascii=False, sort_keys=True, default=str)
+        key = json.dumps(
+            identity_value(row) if use_references else row,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
         if key not in seen:
             seen.add(key)
             out.append(row)
@@ -1375,9 +1399,13 @@ def _preview(
     if columns:
         return [{column: row.get(column) for column in columns} for row in rows[:10]]
     if focus:
-        return [
-            row.get(focus, {}).get("properties", {}).get("name")
-            or row.get(focus, {}).get("properties", {}).get("id")
-            for row in rows[:10]
-        ]
+        preview = []
+        for row in rows[:10]:
+            value = row.get(focus, {})
+            props = value.get("properties", {})
+            display = props.get("name") or props.get("id")
+            preview.append(
+                props if display is None and isinstance(value, EntityPayload) else display
+            )
+        return preview
     return rows[:10]

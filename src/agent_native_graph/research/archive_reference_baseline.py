@@ -58,6 +58,15 @@ def archive(run: Path, root: Path, tasks_path: Path, graph_path: Path) -> Path:
         if not Path(source).exists():
             raise FileNotFoundError(source)
 
+    integrity = None
+    if metadata.get("verify_graph_block"):
+        from agent_native_graph.research.graph_integrity import integrity_path, validate_integrity
+
+        integrity = integrity_path(run)
+        evidence = validate_integrity(integrity, run, configuration=metadata_path)
+        if evidence["graph_sha256"] != metadata["graph_sha256"]:
+            raise ValueError("Graph integrity report disagrees with baseline graph input")
+
     run_id = "_".join(
         [
             datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"),
@@ -107,6 +116,9 @@ def archive(run: Path, root: Path, tasks_path: Path, graph_path: Path) -> Path:
         "call_logs": call_files,
         "archived_at": datetime.now(UTC).isoformat(),
     }
+    if integrity is not None:
+        shutil.copy2(integrity, destination / "graph-integrity.json")
+        manifest["graph_integrity_sha256"] = _sha256(destination / "graph-integrity.json")
     (destination / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

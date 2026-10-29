@@ -1,9 +1,9 @@
 """Validate saved query re-execution evidence before publishing it in static docs."""
 
-import hashlib
 import json
 from pathlib import Path
 
+from agent_native_graph.research.evaluation_storage import EvaluationReader
 from agent_native_graph.research_common import result_matches_answer
 
 
@@ -29,10 +29,9 @@ def load_evaluation(root: Path, config: dict, pinned: dict, runs: list) -> dict 
         ):
             raise ValueError("Query evaluation ANA provenance mismatch")
     gold = {r["qid"]: r for r in runs[0]["records"]}
+    reader = EvaluationReader(folder)
     for entry in [dict(report["gold"], file="gold.jsonl"), *report["baselines"].values()]:
-        payload = (folder / entry["file"]).read_bytes()
-        if hashlib.sha256(payload).hexdigest() != entry["sha256"]:
-            raise ValueError("Query evaluation checksum mismatch")
+        payload = reader.read(entry["file"], entry["sha256"])
         records = [json.loads(line) for line in payload.splitlines() if line.strip()]
         if len(records) != 100 or {r["qid"] for r in records} != set(pinned["qids"]):
             raise ValueError("Query evaluation must cover exactly 100 QIDs")

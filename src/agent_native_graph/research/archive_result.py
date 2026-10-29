@@ -77,9 +77,20 @@ def main() -> None:
     else:
         validate_run_rows(rows, args.limit, args.tasks_file)
 
+    integrity = None
+    if config and config.get("options", {}).get("verify_graph_block"):
+        from agent_native_graph.research.graph_integrity import integrity_path, validate_integrity
+
+        integrity = integrity_path(args.run)
+        evidence = validate_integrity(integrity, args.run, configuration=config_path(args.run))
+        if evidence["graph_sha256"] != config["inputs"]["graph"]["sha256"]:
+            raise ValueError("Graph integrity report disagrees with run graph input")
+
     run_id = _run_id(args)
     suite = _suite(args.limit)
-    root = _archive_root(args.root, args.limit)
+    root = _archive_root(
+        args.root, args.limit, (config or {}).get("options", {}).get("result_policy")
+    )
     run_dir = root / args.benchmark / suite / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -91,6 +102,9 @@ def main() -> None:
     if config:
         _write_json(run_dir / "run-config.json", public_config(config))
     manifest = _manifest(args, run_id, destination, rows, config)
+    if integrity is not None:
+        shutil.copy2(integrity, run_dir / "graph-integrity.json")
+        manifest["graph_integrity_sha256"] = file_hash(run_dir / "graph-integrity.json")
     summary = _summary(rows, run_id)
     failures = [_failure_record(row) for row in rows if not row.get("matches_answer_json")]
 
@@ -154,8 +168,8 @@ def validate_run_rows(rows: list[dict], limit: int, tasks_file: Path) -> None:
             raise ValueError("Run QIDs differ from the selected task set")
 
 
-def _archive_root(root: Path, limit: int) -> Path:
-    if limit != 347 and root == Path("results"):
+def _archive_root(root: Path, limit: int, result_policy: str | None = None) -> Path:
+    if (limit != 347 or result_policy) and root.resolve() == Path("results").resolve():
         return Path(".local-results")
     return root
 
