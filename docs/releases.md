@@ -1,8 +1,8 @@
 # Release Wheel and Docker Image
 
-Release `v0.1.0` is available with a Linux amd64 image. The multi-architecture
-workflow described here applies to subsequent releases after its dry run and
-review. It does **not** modify the existing `v0.1.0` tag, digest or release assets.
+Starting with `v0.1.1`, releases include a Linux amd64/arm64 image, built and
+tested natively on both platforms. Release `v0.1.0` remains amd64-only; this
+workflow does **not** modify its existing tag, digest or release assets.
 Each new release must be explicitly published by a maintainer. This prototype
 is not a production security certification.
 
@@ -100,7 +100,7 @@ make sync
 make lint
 make test
 make build
-make check-release RELEASE_TAG=v0.1.0
+make check-release RELEASE_TAG=v0.1.1
 make test-distribution
 ```
 
@@ -151,23 +151,23 @@ For the library, download the wheel and `SHA256SUMS` from the GitHub Release
 ```bash
 sha256sum --check SHA256SUMS
 uv venv
-uv pip install ./agent_native_graph-0.1.0-py3-none-any.whl
+uv pip install ./agent_native_graph-0.1.1-py3-none-any.whl
 ```
 
 On macOS use `shasum -a 256 -c SHA256SUMS`. For the HTTP extra, install
-`'./agent_native_graph-0.1.0-py3-none-any.whl[service]'` instead. PyPI name-based
+`'./agent_native_graph-0.1.1-py3-none-any.whl[service]'` instead. PyPI name-based
 installation is not promised by this workflow.
 
 To use the prebuilt container, replace the source-built image in the
 [server instructions](library-and-server.md#http-server) with:
 
 ```bash
-docker pull ghcr.io/paoloalbano/agent-native-graph:0.1.0
+docker pull ghcr.io/paoloalbano/agent-native-graph:0.1.1
 ```
 
-That first release is amd64-only. After a new multi-architecture release is
-published, replace `0.1.0` with its version and Docker will choose amd64 or arm64
-automatically. No existing published version is silently upgraded by this change.
+Docker chooses amd64 or arm64 automatically. For explicit selection, use
+`--platform linux/arm64` or `--platform linux/amd64`, or the `0.1.1-arm64` and
+`0.1.1-amd64` tags. No existing published version is silently upgraded.
 
 Keep the same authentication file mount, Neo4j environment variables and
 loopback port mapping; the image bundles neither Neo4j nor graph data. For

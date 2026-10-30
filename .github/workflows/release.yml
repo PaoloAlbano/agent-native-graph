@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version to validate (e.g. v0.1.0); manual runs NEVER publish"
+        description: "Version to validate (e.g. v0.1.1); manual runs NEVER publish"
         required: true
         type: string
 
