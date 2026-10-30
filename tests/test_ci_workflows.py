@@ -1,5 +1,6 @@
 """Protect the code-check/build/deploy boundary without requiring GitHub credentials."""
 
+import re
 from pathlib import Path
 
 import yaml
@@ -75,6 +76,7 @@ def test_pages_publication_is_gated_on_main_and_successful_build():
     )
     assert artifact["if"] == "inputs.publish && " + deploy["if"]
     assert artifact["with"]["path"] == "build/site"
+    assert artifact["with"]["include-hidden-files"] == "true"
 
 
 def test_changes_to_either_workflow_trigger_checks():
@@ -83,3 +85,43 @@ def test_changes_to_either_workflow_trigger_checks():
         assert "paths" not in (triggers[event] or {})
         assert "paths-ignore" not in (triggers[event] or {})
     assert workflow("ci.yml")["concurrency"]["group"] == "ci-${{ github.ref }}"
+
+
+def test_runners_and_external_actions_are_pinned_consistently():
+    """Avoid silent OS migrations and mutable Action tags across all workflows."""
+    refs = {}
+    for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        config = workflow(path.name)
+        for job in config["jobs"].values():
+            if "uses" in job:
+                assert job["uses"].startswith("./.github/workflows/")
+                continue
+            assert job["runs-on"] == "ubuntu-24.04", path.name
+            for step in job.get("steps", []):
+                if "uses" not in step:
+                    continue
+                action, ref = step["uses"].rsplit("@", 1)
+                assert re.fullmatch(r"[a-f0-9]{40}", ref), step["uses"]
+                assert refs.setdefault(action, ref) == ref, action
+        source = path.read_text()
+        assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24" not in source
+        assert "ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION" not in source
+
+
+def test_release_artifact_upgrades_preserve_names_and_strict_digest_checks():
+    """Keep the archived producer/consumer protocol when upgrading artifact Actions."""
+    release = workflow("release.yml")
+    uploads = [
+        s
+        for s in release["jobs"]["build"]["steps"]
+        if s.get("uses", "").startswith("actions/upload-artifact@")
+    ]
+    downloads = [
+        s
+        for s in release["jobs"]["publish"]["steps"]
+        if s.get("uses", "").startswith("actions/download-artifact@")
+    ]
+    assert {s["with"]["name"] for s in uploads} == {"python-distributions", "tested-image"}
+    assert {s["with"]["name"] for s in downloads} == {s["with"]["name"] for s in uploads}
+    assert all(s["with"]["archive"] == "true" for s in uploads)
+    assert all(s["with"]["digest-mismatch"] == "error" for s in downloads)
