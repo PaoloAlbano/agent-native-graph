@@ -10,6 +10,7 @@ run is not a prerequisite for using ANA on your own Neo4j.
 | Prepare the benchmark inputs | [Reproduction](docs/reproduction.md#prepare-company-data) |
 | Add or refresh baseline comparison evidence | [Comparison workflow](docs/multigraphrag-comparison.md#contributor-workflow) |
 | Use your own graph through Python or HTTP | [Library and server guide](docs/library-and-server.md) |
+| Build, verify or release Python/Docker artifacts | [Release procedure](docs/releases.md) |
 
 ## Setup and Checks
 
@@ -60,6 +61,11 @@ to its branch-push run. Manual runs are available on the **CI** workflow; a manu
 run on a feature branch still cannot publish Pages. If branch protection requires
 old check names, update required checks to the names shown on the current PR.
 Changing these workflows does not configure repository protection rules.
+
+[release.yml](.github/workflows/release.yml) is independent of Pages. Manual
+runs only build/test; stable published GitHub Releases can attach Python
+distributions and push the tested image to GHCR. See the
+[release gates and maintainer checklist](docs/releases.md) before creating tags.
 
 ## Add Research Results
 

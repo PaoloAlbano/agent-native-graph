@@ -28,7 +28,7 @@ jobs:
       - name: Lint Python
         run: make lint
       - name: Check Python formatting
-        run: uv run ruff format --check src/agent_native_graph tests examples docs/site/social_preview.py
+        run: uv run ruff format --check src/agent_native_graph tests examples docs/site/social_preview.py .github/release_artifacts.py
       - name: Check browser script syntax
         run: |
           node --check docs/site/site.js

@@ -233,6 +233,10 @@ The app owns and closes its backends. Session idle timeout and capacity are
 configurable; see the [session protocol and migration](docs/library-and-server.md#http-server).
 Use one worker: session state is process-local, not a shared multi-worker store.
 
+A [release guide](docs/releases.md) describes the opt-in GitHub Release workflow
+for wheels, source archives and versioned GHCR images. It includes a manual
+build/test-only mode; this does not imply a release or PyPI upload already exists.
+
 A [Dockerfile](Dockerfile) is provided for this experimental service, not for
 loading datasets or running benchmarks automatically. For a Docker Desktop
 local example, configure the URI to reach Neo4j from inside the container:
@@ -246,7 +250,7 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   -e NEO4J_USER -e NEO4J_PASSWORD -e NEO4J_DATABASE agent-native-graph
 ```
 
-The image runs as UID/GID 10001, sets no database credentials in Docker ENV and
+The image installs a wheel (not editable source), runs as UID/GID 10001, sets no database credentials in Docker ENV and
 checks process liveness with a Docker healthcheck. The mounted client file must
 be readable by that UID. Adjust the URI for your container network.
 `make docker-run` also binds loopback; `make serve` listens on all container/host

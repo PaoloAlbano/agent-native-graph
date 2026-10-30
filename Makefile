@@ -58,6 +58,8 @@ help:
 	@echo "  make test             Run all current unit tests"
 	@echo "  make test-reference   Offline pinned-controller tests with fake model/graph"
 	@echo "  make test-distribution  Opt-in wheel/Docker smoke on disposable Neo4j (no LLM)"
+	@echo "  make build            Build wheel and source distribution (no publication)"
+	@echo "  make check-release RELEASE_TAG=v0.1.0  Audit version, package contents and checksums"
 	@echo "  make prepare-company-tasks  Build data/tasks_company_test.jsonl from CypherBench"
 	@echo "  make load-company     Clear/load the CypherBench company graph into Neo4j"
 	@echo "  make export-schema    Export the loaded Company graph schema for benchmarking"
@@ -100,10 +102,18 @@ install-mcp:
 	@uv sync --locked --extra dev --extra service --extra mcp
 
 format:
-	@uv run ruff format src/agent_native_graph tests examples docs/site/social_preview.py
+	@uv run ruff format src/agent_native_graph tests examples docs/site/social_preview.py .github/release_artifacts.py
 
 lint:
-	@uv run ruff check src/agent_native_graph tests examples docs/site/social_preview.py
+	@uv run ruff check src/agent_native_graph tests examples docs/site/social_preview.py .github/release_artifacts.py
+
+.PHONY: build check-release
+build:
+	@uv build
+
+check-release:
+	@test -n "$(RELEASE_TAG)" || (echo "Set RELEASE_TAG=vX.Y.Z"; exit 1)
+	@uv run python .github/release_artifacts.py --tag "$(RELEASE_TAG)" --dist dist
 
 test:
 	@uv run pytest tests -q

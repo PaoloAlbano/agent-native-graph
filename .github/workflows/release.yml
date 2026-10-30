@@ -1,0 +1,132 @@
+name: Release artifacts
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version to validate (e.g. v0.1.0); manual runs NEVER publish"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and test distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Reject already-immutable releases
+        if: github.event_name == 'release' && github.event.release.immutable
+        run: |
+          echo "This workflow attaches assets after publication; immutable releases need a draft-promotion workflow."
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Validate tag and locked version
+        id: identity
+        run: |
+          python .github/release_artifacts.py --tag "$RELEASE_TAG"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Lint and test
+        run: |
+          uv sync --locked --extra dev --extra service
+          make lint
+          uv run ruff format --check src/agent_native_graph tests examples docs/site/social_preview.py .github/release_artifacts.py
+          make test
+          node --test tests/docs_results_ui.test.cjs
+      - name: Build and inspect wheel and source distribution
+        run: |
+          uv build
+          python .github/release_artifacts.py --tag "$RELEASE_TAG" --dist dist
+      - name: Install source distribution outside the checkout
+        run: |
+          uv venv "$RUNNER_TEMP/sdist-smoke"
+          uv pip install --python "$RUNNER_TEMP/sdist-smoke/bin/python" dist/*.tar.gz
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/sdist-smoke/bin/python" -I -c 'from agent_native_graph import get_tool_specs; assert get_tool_specs()'
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image from the release wheel
+        run: |
+          docker buildx build --load --platform linux/amd64 \
+            --build-context wheels=./dist \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=${RELEASE_TAG#v}" \
+            --tag ana-release:test .
+      - name: Test the exact wheel and image on disposable Neo4j
+        env:
+          ANA_TEST_DIST_DIR: ${{ github.workspace }}/dist
+          ANA_TEST_SERVICE_IMAGE: ana-release:test
+        run: make test-distribution
+      - name: Export tested image
+        run: docker save ana-release:test | gzip > image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tested-image
+          path: image.tar.gz
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Publish tested artifacts
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-image
+      - name: Verify distributions and load tested image
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          docker load --input image.tar.gz
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Publish versioned image and record digest
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker tag ana-release:test "$IMAGE:$VERSION"
+          docker push "$IMAGE:$VERSION"
+          docker image inspect "$IMAGE:$VERSION" --format '{{range .RepoDigests}}{{println .}}{{end}}' > dist/image-digest.txt
+          test -s dist/image-digest.txt
+          cat dist/image-digest.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Attach distributions and image digest to the release
+        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY"
