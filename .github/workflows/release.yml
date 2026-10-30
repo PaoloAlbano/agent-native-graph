@@ -61,31 +61,65 @@ jobs:
           uv pip install --python "$RUNNER_TEMP/sdist-smoke/bin/python" dist/*.tar.gz
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/sdist-smoke/bin/python" -I -c 'from agent_native_graph import get_tool_specs; assert get_tool_specs()'
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build image from the release wheel
-        run: |
-          docker buildx build --load --platform linux/amd64 \
-            --build-context wheels=./dist \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --label "org.opencontainers.image.version=${RELEASE_TAG#v}" \
-            --tag ana-release:test .
-      - name: Test the exact wheel and image on disposable Neo4j
-        env:
-          ANA_TEST_DIST_DIR: ${{ github.workspace }}/dist
-          ANA_TEST_SERVICE_IMAGE: ana-release:test
-        run: make test-distribution
-      - name: Export tested image
-        run: docker save ana-release:test | gzip > image.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python-distributions
           path: dist/
           archive: true
           if-no-files-found: error
+
+  images:
+    name: Build and test image (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      ARCH: ${{ matrix.arch }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --locked --extra dev --extra service
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python-distributions
+          path: dist
+          digest-mismatch: error
+      - name: Verify wheel and source checksums
+        run: (cd dist && sha256sum --check SHA256SUMS)
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build native image from the shared release wheel
+        run: |
+          docker buildx build --load --platform "linux/$ARCH" \
+            --build-context wheels=./dist \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --tag "ana-release:$ARCH" .
+          test "$(docker image inspect "ana-release:$ARCH" --format '{{.Os}}/{{.Architecture}}')" = "linux/$ARCH"
+      - name: Test the exact wheel and image on disposable Neo4j
+        env:
+          ANA_TEST_DIST_DIR: ${{ github.workspace }}/dist
+          ANA_TEST_SERVICE_IMAGE: ana-release:${{ matrix.arch }}
+        run: make test-distribution
+      - name: Export tested image
+        run: docker save "ana-release:$ARCH" | gzip > image.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: tested-image
+          name: tested-image-${{ matrix.arch }}
           path: image.tar.gz
           archive: true
           retention-days: 3
@@ -95,7 +129,7 @@ jobs:
   publish:
     name: Publish tested artifacts
     if: github.event_name == 'release' && !github.event.release.prerelease
-    needs: build
+    needs: [build, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -113,24 +147,40 @@ jobs:
           digest-mismatch: error
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: tested-image
+          name: tested-image-amd64
+          path: images/amd64
           digest-mismatch: error
-      - name: Verify distributions and load tested image
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tested-image-arm64
+          path: images/arm64
+          digest-mismatch: error
+      - name: Verify distributions and load both tested images
         run: |
           (cd dist && sha256sum --check SHA256SUMS)
-          docker load --input image.tar.gz
+          for ARCH in amd64 arm64; do
+            docker load --input "images/$ARCH/image.tar.gz"
+            test "$(docker image inspect "ana-release:$ARCH" --format '{{.Os}}/{{.Architecture}}')" = "linux/$ARCH"
+          done
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - name: Publish versioned image and record digest
+      - name: Publish tested platform images and multi-arch index
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
-          docker tag ana-release:test "$IMAGE:$VERSION"
-          docker push "$IMAGE:$VERSION"
-          docker image inspect "$IMAGE:$VERSION" --format '{{range .RepoDigests}}{{println .}}{{end}}' > dist/image-digest.txt
-          test -s dist/image-digest.txt
+          for ARCH in amd64 arm64; do
+            docker tag "ana-release:$ARCH" "$IMAGE:$VERSION-$ARCH"
+            docker push "$IMAGE:$VERSION-$ARCH"
+            docker image inspect "$IMAGE:$VERSION-$ARCH" --format '{{index .RepoDigests 0}}' > "$ARCH.ref"
+          done
+          docker buildx imagetools create --tag "$IMAGE:$VERSION" "$(cat amd64.ref)" "$(cat arm64.ref)"
+          docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' > index.json
+          jq -e '([.manifests[] | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest") | .platform | "\(.os)/\(.architecture)"] | sort) == ["linux/amd64", "linux/arm64"]' index.json
+          DIGEST=$(jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))' index.json)
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > dist/image-digest.txt
           cat dist/image-digest.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Attach distributions and image digest to the release
         run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY"
