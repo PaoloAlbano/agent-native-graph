@@ -59,7 +59,7 @@ help:
 	@echo "  make test-reference   Offline pinned-controller tests with fake model/graph"
 	@echo "  make test-distribution  Opt-in wheel/Docker smoke on disposable Neo4j (no LLM)"
 	@echo "  make build            Build wheel and source distribution (no publication)"
-	@echo "  make check-release RELEASE_TAG=v0.1.0  Audit version, package contents and checksums"
+	@echo "  make check-release RELEASE_TAG=v0.1.1  Audit version, package contents and checksums"
 	@echo "  make prepare-company-tasks  Build data/tasks_company_test.jsonl from CypherBench"
 	@echo "  make load-company     Clear/load the CypherBench company graph into Neo4j"
 	@echo "  make export-schema    Export the loaded Company graph schema for benchmarking"
