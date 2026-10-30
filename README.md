@@ -235,7 +235,9 @@ Use one worker: session state is process-local, not a shared multi-worker store.
 
 A [release guide](docs/releases.md) describes the opt-in GitHub Release workflow
 for wheels, source archives and versioned GHCR images. It includes a manual
-build/test-only mode; this does not imply a release or PyPI upload already exists.
+build/test-only mode. Release `v0.1.0` is available with an amd64 image; the
+updated release workflow adds native amd64/arm64 tests and a shared multi-arch
+image for subsequent releases. No PyPI upload is included.
 
 A [Dockerfile](Dockerfile) is provided for this experimental service, not for
 loading datasets or running benchmarks automatically. For a Docker Desktop

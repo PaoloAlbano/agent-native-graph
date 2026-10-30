@@ -96,7 +96,14 @@ def test_runners_and_external_actions_are_pinned_consistently():
             if "uses" in job:
                 assert job["uses"].startswith("./.github/workflows/")
                 continue
-            assert job["runs-on"] == "ubuntu-24.04", path.name
+            if "strategy" in job:
+                assert job["runs-on"] == "${{ matrix.runner }}", path.name
+                assert {entry["runner"] for entry in job["strategy"]["matrix"]["include"]} == {
+                    "ubuntu-24.04",
+                    "ubuntu-24.04-arm",
+                }
+            else:
+                assert job["runs-on"] == "ubuntu-24.04", path.name
             for step in job.get("steps", []):
                 if "uses" not in step:
                     continue
@@ -113,7 +120,8 @@ def test_release_artifact_upgrades_preserve_names_and_strict_digest_checks():
     release = workflow("release.yml")
     uploads = [
         s
-        for s in release["jobs"]["build"]["steps"]
+        for job in (release["jobs"]["build"], release["jobs"]["images"])
+        for s in job["steps"]
         if s.get("uses", "").startswith("actions/upload-artifact@")
     ]
     downloads = [
@@ -121,7 +129,24 @@ def test_release_artifact_upgrades_preserve_names_and_strict_digest_checks():
         for s in release["jobs"]["publish"]["steps"]
         if s.get("uses", "").startswith("actions/download-artifact@")
     ]
-    assert {s["with"]["name"] for s in uploads} == {"python-distributions", "tested-image"}
-    assert {s["with"]["name"] for s in downloads} == {s["with"]["name"] for s in uploads}
+    assert {s["with"]["name"] for s in uploads} == {
+        "python-distributions",
+        "tested-image-${{ matrix.arch }}",
+    }
+    assert {s["with"]["name"] for s in downloads} == {
+        "python-distributions",
+        "tested-image-amd64",
+        "tested-image-arm64",
+    }
+    native_download = next(
+        s
+        for s in release["jobs"]["images"]["steps"]
+        if s.get("uses", "").startswith("actions/download-artifact@")
+    )
+    assert native_download["with"] == {
+        "name": "python-distributions",
+        "path": "dist",
+        "digest-mismatch": "error",
+    }
     assert all(s["with"]["archive"] == "true" for s in uploads)
     assert all(s["with"]["digest-mismatch"] == "error" for s in downloads)

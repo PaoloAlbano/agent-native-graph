@@ -2,7 +2,11 @@
 
 import hashlib
 import io
+import json
 import runpy
+import shlex
+import shutil
+import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
@@ -124,20 +128,98 @@ def test_unrelated_artifact_is_an_error(package):
 
 def test_manual_workflow_cannot_publish_and_release_reuses_tested_artifacts():
     workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
-    build, publish = workflow["jobs"]["build"], workflow["jobs"]["publish"]
+    build, images, publish = (workflow["jobs"][name] for name in ("build", "images", "publish"))
     assert workflow["permissions"] == {"contents": "read"}
     assert publish["if"] == "github.event_name == 'release' && !github.event.release.prerelease"
-    assert publish["needs"] == "build"
+    assert publish["needs"] == ["build", "images"]
+    assert images["needs"] == "build"
     assert publish["permissions"] == {"contents": "write", "packages": "write"}
-    steps = build["steps"]
+    steps = images["steps"]
     distribution = next(s for s in steps if s.get("run") == "make test-distribution")
-    assert distribution["env"]["ANA_TEST_SERVICE_IMAGE"] == "ana-release:test"
+    assert distribution["env"]["ANA_TEST_SERVICE_IMAGE"] == "ana-release:${{ matrix.arch }}"
     assert distribution["env"]["ANA_TEST_DIST_DIR"] == "${{ github.workspace }}/dist"
     build_commands = "\n".join(s.get("run", "") for s in steps)
+    package_commands = "\n".join(s.get("run", "") for s in build["steps"])
     publish_commands = "\n".join(s.get("run", "") for s in publish["steps"])
     assert "--build-context wheels=./dist" in build_commands
-    assert "docker save ana-release:test" in build_commands
-    assert "docker load --input image.tar.gz" in publish_commands
-    assert "docker build" not in publish_commands
+    assert 'docker save "ana-release:$ARCH"' in build_commands
+    assert 'docker load --input "images/$ARCH/image.tar.gz"' in publish_commands
+    assert "uv build" in package_commands and "docker build" not in package_commands
+    assert "uv build" not in build_commands
+    assert "docker buildx imagetools create" in publish_commands
+    assert "docker buildx build" not in publish_commands
+    assert "docker build " not in publish_commands
     assert "uv build" not in publish_commands
     assert "--clobber" not in publish_commands
+
+
+def test_both_architectures_are_tested_natively_before_multiarch_publication():
+    """Both runner branches must finish, and only saved tested images can be published."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    images, publish = (workflow["jobs"][name] for name in ("images", "publish"))
+    assert images["runs-on"] == "${{ matrix.runner }}"
+    assert images["strategy"]["fail-fast"] is False
+    assert images["strategy"]["matrix"]["include"] == [
+        {"arch": "amd64", "runner": "ubuntu-24.04"},
+        {"arch": "arm64", "runner": "ubuntu-24.04-arm"},
+    ]
+    steps = images["steps"]
+    commands = "\n".join(s.get("run", "") for s in steps)
+    assert '--platform "linux/$ARCH"' in commands
+    assert "sha256sum --check SHA256SUMS" in commands
+    assert "{{.Os}}/{{.Architecture}}" in commands
+    test_at = next(i for i, s in enumerate(steps) if s.get("run") == "make test-distribution")
+    save_at = next(i for i, s in enumerate(steps) if "docker save" in s.get("run", ""))
+    upload_at = next(
+        i for i, s in enumerate(steps) if s.get("uses", "").startswith("actions/upload-artifact@")
+    )
+    assert test_at < save_at < upload_at
+    assert "packages" not in images.get("permissions", {})
+    assert not any(s.get("continue-on-error") or s.get("if") == "always()" for s in steps)
+    commands = "\n".join(s.get("run", "") for s in publish["steps"])
+    assert '"$(cat amd64.ref)" "$(cat arm64.ref)"' in commands
+    assert '["linux/amd64", "linux/arm64"]' in commands
+    assert 'select(.annotations["vnd.docker.reference.type"] != "attestation-manifest")' in commands
+    assert "printf '%s@%s\\n'" in commands
+    assert "always()" not in publish["if"]
+
+
+@pytest.mark.skipif(
+    not shutil.which("jq"), reason="jq is required to exercise the release index gate"
+)
+@pytest.mark.parametrize(
+    ("platforms", "attestation", "valid"),
+    [
+        (["linux/amd64", "linux/arm64"], False, True),
+        (["linux/amd64", "linux/arm64"], True, True),
+        (["linux/amd64"], False, False),
+        (["linux/amd64", "linux/amd64"], False, False),
+        (["linux/amd64", "linux/arm64", "windows/amd64"], False, False),
+        (["linux/amd64", "linux/arm64", "unknown/unknown"], False, False),
+    ],
+)
+def test_index_gate_accepts_only_both_runnable_platforms(platforms, attestation, valid):
+    """Execute the workflow's actual jq gate, including Docker Desktop attestation entries."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    commands = "\n".join(s.get("run", "") for s in workflow["jobs"]["publish"]["steps"])
+    gate = next(line for line in commands.splitlines() if line.startswith("jq -e "))
+    expression = shlex.split(gate)[2]
+    entries = [
+        {"platform": dict(zip(("os", "architecture"), platform.split("/"), strict=True))}
+        for platform in platforms
+    ]
+    if attestation:
+        entries.append(
+            {
+                "platform": {"os": "unknown", "architecture": "unknown"},
+                "annotations": {"vnd.docker.reference.type": "attestation-manifest"},
+            }
+        )
+    result = subprocess.run(
+        ["jq", "-e", expression],
+        input=json.dumps({"manifests": entries}),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert (result.returncode == 0) is valid, result.stderr
