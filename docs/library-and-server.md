@@ -22,6 +22,10 @@ For HTTP support use `uv add --editable ../agent-native-graph --extra service`.
 Adjust the relative checkout path. These are source installs; this guide does
 not assume a published PyPI release. Python 3.11+ is required.
 
+For versioned wheel downloads and prebuilt GHCR images, see the
+[release guide](releases.md). Those instructions apply after a maintainer has
+explicitly published a release; source installation remains available.
+
 Configure `NEO4J_URI`, `NEO4J_USER` and `NEO4J_PASSWORD` outside version control.
 Use an account limited to the graph access and schema procedures you require.
 Pass `database="your-database"` to the Python factory, or set `NEO4J_DATABASE`

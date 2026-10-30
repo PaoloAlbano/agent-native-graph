@@ -77,19 +77,38 @@ def distribution(tmp_path_factory):
     run("docker", "info", cwd=work, timeout=30)
     tag = "ana-dist-" + uuid4().hex[:12]
     network, graph, service = tag, tag + "-graph", tag + "-service"
-    service_image = tag + ":test"
+    service_image = os.getenv("ANA_TEST_SERVICE_IMAGE") or tag + ":test"
     graph_image = os.getenv("ANA_TEST_NEO4J_IMAGE", "neo4j:2026.05.0")
     created, image_built, network_created = [], False, False
     try:
-        run("uv", "build", "--wheel", "--out-dir", str(work / "dist"), cwd=ROOT, env=env)
-        wheels = list((work / "dist").glob("*.whl"))
+        dist = (
+            Path(os.environ["ANA_TEST_DIST_DIR"]).resolve()
+            if os.getenv("ANA_TEST_DIST_DIR")
+            else work / "dist"
+        )
+        if not os.getenv("ANA_TEST_DIST_DIR"):
+            run("uv", "build", "--wheel", "--out-dir", str(dist), cwd=ROOT, env=env)
+        wheels = list(dist.glob("*.whl"))
         assert len(wheels) == 1
         run("uv", "venv", "--python", sys.executable, str(work / "venv"), cwd=work, env=env)
         python = str(work / "venv/bin/python")
         run("uv", "pip", "install", "--python", python, str(wheels[0]), cwd=work, env=env)
         shutil.copyfile(ROOT / "tests/distribution_workflow.py", work / "client.py")
-        run("docker", "build", "--tag", service_image, str(ROOT), cwd=work, timeout=900)
-        image_built = True
+        if not os.getenv("ANA_TEST_SERVICE_IMAGE"):
+            run(
+                "docker",
+                "buildx",
+                "build",
+                "--load",
+                "--build-context",
+                f"wheels={dist}",
+                "--tag",
+                service_image,
+                str(ROOT),
+                cwd=work,
+                timeout=900,
+            )
+            image_built = True
         run("docker", "network", "create", network, cwd=work)
         network_created = True
         created.append(graph)
@@ -317,7 +336,7 @@ def test_shipped_docker_service_on_the_same_generic_graph(distribution, identity
                 "--env",
                 "ANA_TEST_GRAPH_URI=bolt://graph:7687",
                 "--env",
-                "ANA_TEST_PACKAGE_ROOT=/app/src",
+                "ANA_TEST_PACKAGE_ROOT=/app/.venv",
                 state["service"],
                 "python",
                 "-I",

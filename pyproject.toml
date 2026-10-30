@@ -43,6 +43,12 @@ mcp = [
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_native_graph"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/pyproject.toml", "/uv.lock", "/README.md", "/LICENSE"]
+
 [tool.uv]
 package = true
 
