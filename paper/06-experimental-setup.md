@@ -27,21 +27,24 @@ commit `72fe7105310c85ebe6b1b3b7d4c6152ddb206393` on branch `llm_calls_recap`:
 
 ## Benchmark Protocol
 
-Full-split analysis retains all 347 questions in each of thirteen ANA runs. The
+Full-split analysis retains all 347 questions in each of twelve ANA runs. The
 external comparison uses exactly the 100 QIDs pinned from the reference Company
 trace in [reference_company100_qids.json](../data/reference_company100_qids.json).
 This set differs from the first 100 local tasks by one question; a numerical
 limit of 100 is not a substitute. Runs are paired by model name, temperature and
-requested reasoning setting. The repeated GPT-OSS T0/none observations remain
-separate and share the corresponding external pair.
+requested reasoning setting. The current matrix has one observation per
+model/profile; the earlier replicated cell is not retained in the replacement
+matrix.
 
 For the common metric, saved baseline queries are checked with `EXPLAIN` and
 only read queries are executed, with a 30-second transaction timeout, rollback
 and a 100,000-row cap. Missing queries, query errors and exceeded caps count as
-failures, never partial successes. The graph is fingerprinted against the dump
-before evaluation and again afterwards. The selected complete evaluation
-contains 100 golden queries and 2,400 baseline-query attempts, plus re-scoring
-of ANA's already saved rows. No LLM call is made during this evaluation.
+failures, never partial successes. The saved baseline evaluation fingerprints the graph against the dump before
+execution and again afterwards. It contains 100 golden queries and 2,400
+baseline-query attempts. The current comparison refresh reuses those unchanged
+executions and re-scores the new ANA rows; its manifest records the source
+checksum rather than claiming a new baseline execution. No LLM call is made
+by this refresh.
 
 ## Baseline Implementations
 
@@ -59,6 +62,10 @@ behavior of the pinned implementation, not a claim of bit-for-bit reproduction
 of the [Multi-Agent GraphRAG paper](https://arxiv.org/abs/2511.08274v1).
 
 ANA receives a fixed native tool catalog and composes operations over handles.
+The current replacement matrix uses shared graph/schema preflight, bounded-v1
+result handling, before/after graph-content verification, concurrency 10 per GPT
+run and 3 per Qwen run. The historical baseline generations did not use this
+preflight treatment. This is not the proposed controlled protocol.
 The reported standard treatment uses `overview` schema entry, no optional
 planning tools, no wrapper planner, no automatic final fetch and no runner
 guardrails that replace the model's choices. Benchmark-only all-page evaluation

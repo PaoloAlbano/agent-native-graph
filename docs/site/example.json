@@ -1,11 +1,12 @@
 {
-  "run_id": "2026-10-24_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_company_ana_gptoss120_temp1_medium_current_n347",
+  "run_id": "2026-10-31_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_openai--gpt-oss-120b_temp1-medium-replacement",
   "qid": "dac46171-f5ec-4da4-9b64-b16c50231cd5",
   "guide_notes": [
-    "Discover the graph vocabulary and the direction of the subsidiaryOf relationship.",
-    "Resolve the named subsidiary. The returned handle contains the selected entity under the variable subsidiary; alternative candidates are separate suggestions.",
-    "Follow subsidiaryOf outward from the subsidiary to its parent company. The new handle retains both entity variables.",
-    "Select the parent company's name. The resulting table handle contains answer values and no longer carries entity variables.",
-    "Fetch the final table. This answer fits on one page and matches the benchmark's expected rows."
+    "Discover the graph vocabulary and the direction of subsidiaryOf.",
+    "Resolve the named subsidiary. The returned handle h1 binds it under subsidiary.",
+    "Try the incoming direction. Handle h2 is empty: this recorded attempt does not find the parent.",
+    "Correct the direction and expand outward from the original h1. Handle h3 binds the parent as parent.",
+    "Project the parent's name from h3 into the scalar table h4, without entity bindings.",
+    "Fetch h4. The returned name matches the benchmark answer."
   ]
 }

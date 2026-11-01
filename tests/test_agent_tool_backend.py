@@ -184,14 +184,16 @@ def test_schema_overview_exposes_ready_direction_rules(schema: dict[str, Any]) -
     assert any(action["tool"] == "schema_search" for action in overview["next_actions"])
 
 
-def test_tool_dispatch_ignores_unexpected_model_arguments(schema: dict[str, Any]) -> None:
+def test_tool_dispatch_rejects_unexpected_model_arguments(schema: dict[str, Any]) -> None:
     backend = _schema_only_backend(schema)
 
-    overview = backend.call(
-        "schema_overview",
-        {"description": "Model-generated stray argument that is not part of the tool schema."},
-    )
+    with pytest.raises(ValueError, match="unsupported parameter.*description"):
+        backend.call(
+            "schema_overview",
+            {"description": "Model-generated stray argument that is not part of the tool schema."},
+        )
 
+    overview = backend.call("schema_overview", {})
     assert "labels" in overview
 
 
@@ -951,11 +953,11 @@ class _FakeSession:
             return [
                 _FakeRecord(
                     {
-                        "row_index": row["row_index"],
-                        "related_count": 1 if row["row_index"] else 0,
+                        "source_id": source_id,
+                        "related_count": 1 if index else 0,
                     }
                 )
-                for row in params.get("rows", [])
+                for index, source_id in enumerate(params.get("source_ids", []))
             ]
         if "shared_members" in query:
             return [_FakeRecord({"company": "Cardinal Health", "shared_members": 1})]
@@ -2076,10 +2078,8 @@ def test_optional_expand_count_builds_left_preserving_count_without_neo4j(
     assert "NOT elementId(r) IN row.rel_ids" not in query
     assert "LIMIT $limit" not in query
     assert "limit" not in params
-    assert params["rows"] == [
-        {"row_index": 0, "source_id": "p1", "rel_ids": []},
-        {"row_index": 1, "source_id": "p2", "rel_ids": []},
-    ]
+    assert params["source_ids"] == ["p1", "p2"]
+    assert "UNWIND" not in query
     assert "fetch" in result["finalization_hint"]
     assert result["columns"] == ["name", "num"]
     assert fetch_rows(backend, result["handle"]) == [["Zero Founder", 0], ["One Founder", 1]]
@@ -2118,8 +2118,10 @@ def test_optional_expand_count_can_exclude_already_traversed_relationships(
     )
 
     query, params = driver.queries[-1]
-    assert "WHERE r IS NULL OR NOT elementId(r) IN row.rel_ids" in query
-    assert params["rows"] == [{"row_index": 0, "source_id": "p1", "rel_ids": ["rel-1"]}]
+    assert "WHERE r IS NULL OR NONE(excluded IN $excluded_relationships" in query
+    assert "excluded.source_id = s.id AND elementId(r) IN excluded.rel_ids" in query
+    assert params["source_ids"] == ["p1"]
+    assert params["excluded_relationships"] == [{"source_id": "p1", "rel_ids": ["rel-1"]}]
 
 
 def test_optional_expand_count_keeps_explicit_limit(schema: dict[str, Any]) -> None:
@@ -2149,8 +2151,8 @@ def test_optional_expand_count_keeps_explicit_limit(schema: dict[str, Any]) -> N
     )
 
     query, params = driver.queries[-1]
-    assert "LIMIT $limit" in query
-    assert params["limit"] == 1
+    assert "LIMIT" not in query
+    assert params["source_ids"] == ["c1"]
 
 
 def test_pattern_query_does_not_add_implicit_limit(schema: dict[str, Any]) -> None:

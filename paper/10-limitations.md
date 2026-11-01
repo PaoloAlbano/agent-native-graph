@@ -9,7 +9,7 @@ examples. The reported split is therefore not an untouched held-out validation
 of a frozen API. Generic operator names and the absence of question-ID routing
 do not remove development exposure; some descriptions retain Company-flavored
 examples. No cross-domain, unseen-schema, SQL or programming-workflow result
-is reported. Only two served model identifiers and one graph are studied.
+is reported. Only three served model identifiers and one graph are studied.
 
 ## Comparative Validity
 
@@ -24,8 +24,9 @@ We have not compared ANA experimentally with StructGPT, ToG or an
 AgentBench-inspired minimal graph API. Their related-work discussion is not
 evidence of superior performance over other interface-based approaches.
 
-Historical ANA provenance is incomplete. Most profiles have one observation;
-the repeated GPT-OSS T0/none runs are not a controlled replication. We report no
+Each current profile has only one observation. Launch configurations and
+graph-integrity reports improve provenance but do not establish provider-side
+model revisions or controlled replication. We report no
 statistical significance or causal effect estimate. The same questions and
 baseline runs recur across tables; their rows are not independent replications.
 

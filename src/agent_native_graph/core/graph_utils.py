@@ -16,6 +16,7 @@ __all__ = [
     "_metric_scalar_value",
     "_handle_var_labels",
     "_predicate",
+    "_validate_membership_operand",
     "_safe_name",
     "_server_side_entity_branches",
     "_cypher_filter_clause",
@@ -144,7 +145,17 @@ def _handle_var_labels(handle: Handle, var: str) -> set[str]:
     return labels
 
 
+def _validate_membership_operand(op: str, value: Any) -> None:
+    """Membership filters take one scalar member, never a collection to unwrap."""
+    if op in {"in", "not_in"} and isinstance(value, (list, tuple, dict, set, frozenset)):
+        raise ValueError(
+            f"Operator {op!r} requires a scalar member value, not {type(value).__name__}. "
+            "Pass one scalar in value; collections are not converted automatically."
+        )
+
+
 def _predicate(actual: Any, op: str, expected: Any) -> bool:
+    _validate_membership_operand(op, expected)
     if op == "eq":
         return actual == expected
     if op == "neq":
@@ -198,6 +209,7 @@ def _cypher_filter_clause(flt: dict[str, Any], index: int) -> tuple[str, dict[st
     prop = _safe_name(str(flt["property"]))
     op = str(flt["op"])
     value = flt.get("value")
+    _validate_membership_operand(op, value)
     param = f"filter_{index}"
     expr = _cypher_property_expr(var, prop, flt.get("value_type"))
     param_expr = f"${param}"

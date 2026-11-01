@@ -18,6 +18,52 @@ effective payload, so it documents the arguments and descriptions actually sent
 to the model. Run `make docs-serve` to browse it locally. The downloaded catalog
 also includes design status, graph-access profile, availability, and source links.
 
+## Argument Errors
+
+Tool dispatch validates top-level parameters before invoking the tool.
+The error identifies unsupported names
+and lists the tool's declared parameters; argument values are not echoed.
+Public aliases such as `from` and `as` and their Python argument names are
+supported. Supply only one form for each parameter.
+
+For example, `relationship_query` does not accept a top-level
+`relationship_filters` argument. Put relationship predicates in its declared
+`filters` parameter with the relationship's variable (default `rel`).
+
+Membership filters `in` and `not_in` require one scalar member in `value`, not
+a collection of candidate members. Collection-valued operands are rejected
+before query execution or local row filtering, including on empty handles.
+No collection is flattened or replaced with its first element. Existing
+`eq`/`neq` normalization on list properties follows the same membership check.
+
+Python callers receive `ValueError`; the HTTP endpoint returns status 400. The
+benchmark runner uses its existing `tool_error` response, which the model reads
+on its next decision turn. The model must choose whether and how to correct the
+call: the dispatcher does not translate arguments, retry, or choose another tool.
+This enforces top-level `additionalProperties: false`, not full recursive
+JSON Schema validation.
+
+## Query Defaults
+
+`constraint_query` has no implicit candidate limit when `limit` is omitted or
+`null`. An explicit limit bounds entity/name results, and `offset`
+applies. Count mode aggregates all matching candidates. Without a
+limit, large handles can use more memory; paginating `fetch` does not bound the
+earlier query or handle construction.
+
+For `shared_role_aggregate`, omitted/`null` `distinct` behaves like explicit
+`true`. For selections without grouping/metrics, entity variables are deduplicated
+before projecting scalar properties. Different entities with equal names remain
+separate rows. Explicit `false` preserves matching paths in that case.
+
+`optional_expand_count` resolves source identities in a batch, then emits one row
+per unique source in its original first-occurrence order, including zero counts.
+Its source columns do not merge entities with equal projected names. An explicit
+limit selects the source prefix before lookup. Relationship exclusions are
+source-scoped. Both
+property-ID identity and transaction-local references are supported; no fixed
+graph label or index is required.
+
 ## Stability classes
 
 - `core`: generic tools that should remain available in the first production-oriented wrapper.

@@ -1,0 +1,37 @@
+{
+  "version": "ana-graph-integrity-v1",
+  "scope": "graph-content-and-task-coverage",
+  "status": "verified",
+  "database": "neo4j",
+  "before": {
+    "nodes": {
+      "count": 581306,
+      "sha256": "8b8da7bfedd360c6c4895e49ab593614e1f949cf6d5ce94eee485ca038713e8b"
+    },
+    "edges": {
+      "count": 299581,
+      "sha256": "d12781227b7e08521aa7b5b12166a5c9332fa87976841ac07e5ab7791b6976b2"
+    }
+  },
+  "after": {
+    "nodes": {
+      "count": 581306,
+      "sha256": "8b8da7bfedd360c6c4895e49ab593614e1f949cf6d5ce94eee485ca038713e8b"
+    },
+    "edges": {
+      "count": 299581,
+      "sha256": "d12781227b7e08521aa7b5b12166a5c9332fa87976841ac07e5ab7791b6976b2"
+    }
+  },
+  "graph_sha256": "54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b",
+  "source_config_sha256": "c1261746c81f0d33821b19d6e00f8279e13236966fff6f06bd9d3f3bb741b6d3",
+  "expected_question_count": 347,
+  "expected_qid_set_sha256": "f79a5421e3929c340f7562a1f4f26f33b5f22ccaff5cbd10774e908e7cb43a40",
+  "issues": [],
+  "graph_sha256_after": "54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b",
+  "source_config_sha256_after": "c1261746c81f0d33821b19d6e00f8279e13236966fff6f06bd9d3f3bb741b6d3",
+  "run_sha256": "18500b330aaa2e4b9eb3aa05aec44f0387d6024bda5fdd7a221c7524c6a9f948",
+  "question_count": 347,
+  "unique_question_count": 347,
+  "qid_set_sha256": "f79a5421e3929c340f7562a1f4f26f33b5f22ccaff5cbd10774e908e7cb43a40"
+}

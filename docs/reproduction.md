@@ -299,6 +299,12 @@ The policy is saved in both run configurations; changing it rejects resume.
 The ANA archiver routes these exploratory runs to `.local-results/` by default,
 including complete 347-QID runs, to avoid pairing a new treatment with historical
 baselines. Keep them separate until a new publication protocol is approved.
+The current twelve-run ANA matrix was explicitly approved for curation after
+all runs completed and passed graph/coverage validation. It uses this policy
+and shared preflight, while its comparison still uses historical baseline
+generations. This exception is documented in the
+[current results](cypherbench-company-results.md); it does not certify the
+proposed controlled experiment or change the archiver's conservative default.
 This slice does not implement after-block graph certification, a snapshot,
 global resource admission or production-server quotas.
 

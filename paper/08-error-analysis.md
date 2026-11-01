@@ -4,104 +4,72 @@
 
 We distinguish operation-level errors, terminal runner failures and answer
 mismatches. An invalid argument can arise from model planning, a misleading
-contract, an implementation defect or a serving failure. The observed exception
-alone is not enough to assign responsibility. Likewise, a tool error can be
-followed by a successful final fetch without restoring answer correctness.
+contract, an implementation defect or a serving failure. The exception alone
+does not establish responsibility. A tool error can be followed by a successful
+final fetch without restoring answer correctness.
 
-Semantic failures happen when the tool calls execute successfully but implement
-the wrong plan. Examples include:
+The following tables are recomputed from the current twelve full-run
+trajectories, not retained from the replaced matrix. All denominators are 347.
+A task is counted as timeout-affected if a recorded tool error contains
+`timeout` or `timed out`; this is not a terminal-error label. Correct
+recoveries remain included. Parsing counts below are terminal `json_decode`
+records, not a classification of every possible malformed response.
 
-- choosing the wrong grouping variable;
-- selecting the wrong entity type;
-- using a broad pattern where a constrained one was needed;
-- failing to combine OR branches;
-- mishandling list properties;
-- using optional semantics incorrectly;
-- returning plausible but incomplete final projections.
-
-## Three New Qwen Runs
-
-This audit uses Q28-0M, Q28-1N and Q28-1M from Section 7. Counts below concern
-the complete 347-question runs, not the 100-question comparison subset.
+## GPT-OSS-120B
 
 | Observation | No final fetch at step limit | Parsing exceptions | Tasks with a timed-out tool | Timeout-affected tasks later correct |
 | --- | ---: | ---: | ---: | ---: |
-| Q28-0M | 3 | 0 | 8 | 0 |
-| Q28-1N | 8 | 2 | 6 | 1 |
-| Q28-1M | 5 | 0 | 4 | 1 |
+| G-0M | 2 | 1 | 2 | 0 |
+| G-0N | 3 | 0 | 1 | 0 |
+| G-1M | 4 | 4 | 0 | 0 |
+| G-1N | 4 | 2 | 2 | 1 |
 
-All step-limit cases consume the 12 allowed steps. Every timeout-affected task
-later reaches a final fetch, so those timeout counts are not terminal failure
-counts. The primary archived `backend_timeout` labels cover 8, 5 and 3
-non-matching answers, excluding the two correct recoveries. Most timed-out
-operations are `optional_expand_count` (7, 4 and 3 calls respectively); `expand`
-and one `repair_empty_result` call also time out. This suggests a backend-query
-investigation, not proof that eliminating timeouts would repair every plan.
-
-The two parsing exceptions occur in Q28-1N. Each record contains one completed
-`schema_overview` step and two attempted LLM calls, but metrics for only the
-first response. The failed response body was not saved. We cannot distinguish
-malformed tool arguments from response-body decoding or assign a finish reason
-to those failed attempts. No recorded rate-limit retry, length-finished response
-or low-effort retry occurred; this observation does not reconstruct missing
-metrics. Q28-0M records two HTTP retries.
-
-## GPT-OSS-20B Matrix
-
-The same terminal-failure audit on the four complete GPT-OSS-20B runs gives:
+## Qwen3.5-27B
 
 | Observation | No final fetch at step limit | Parsing exceptions | Tasks with a timed-out tool | Timeout-affected tasks later correct |
 | --- | ---: | ---: | ---: | ---: |
-| S28-0N | 29 | 5 | 1 | 0 |
-| S28-0M | 27 | 5 | 1 | 0 |
-| S28-1N | 18 | 17 | 1 | 0 |
-| S29-1M | 23 | 22 | 1 | 0 |
+| Q-0M | 4 | 0 | 1 | 0 |
+| Q-0N | 5 | 0 | 1 | 1 |
+| Q-1M | 5 | 0 | 2 | 1 |
+| Q-1N | 6 | 0 | 1 | 1 |
 
-Parsing exceptions increase at temperature 1 in these observations. Settled
-request accounting records no length-finished responses or failed logical LLM
-calls in any of the four runs; 15, 18, 3 and 0 HTTP retries respectively were
-settled. This rules out an unrecorded pending request as the explanation in
-these artifacts, but the failed parsing inputs were not archived. We cannot
-attribute every JSON exception specifically to malformed native tool arguments.
+## GPT-OSS-20B
 
-Operation-level `pattern_query` errors number 25, 31, 22 and 30 in the same
-order. Repeated errors include treating node `name` as a relationship property,
-omitting `start_label`, and referring to a handle that has not been created.
-These counts include recoverable errors and are not terminal failure totals.
-The schema discovery and pattern tools remain unchanged for this audit; no
-question-specific correction or automatic fallback was introduced.
+| Observation | No final fetch at step limit | Parsing exceptions | Tasks with a timed-out tool | Timeout-affected tasks later correct |
+| --- | ---: | ---: | ---: | ---: |
+| S-0M | 21 | 3 | 0 | 0 |
+| S-0N | 25 | 3 | 0 | 0 |
+| S-1M | 13 | 20 | 1 | 0 |
+| S-1N | 17 | 27 | 1 | 0 |
 
-## Recurrent Trajectory Fragility
+The current GPT-OSS-20B temperature-1 runs have substantially more terminal
+parsing failures than its temperature-0 runs. This observation does not prove
+that temperature caused those failures or identify every missing/invalid
+response payload. Transport retries, finish reasons and observed usage must be
+read from each run's request accounting rather than inferred from accuracy.
 
-The following cases are selected because both recur among terminal failures in
-all three new profiles, not because they represent the entire error distribution.
+A timeout can affect an eventually correct answer, and an executable trajectory
+can still be semantically wrong.
 
-The AT&T shared-role question (`625ba586-61df-402a-97dd-4f176e9ded1f`) reaches
-the step limit in all three new profiles. Its trajectories repeatedly rebuild
-relationship patterns and revisit schema or entity grounding rather than finish
-the role join. The McDonald's CEO/board-count question
-(`b7aa6d83-68c1-4302-85ee-b905d6a43b9f`) also exhausts all three budgets, with
-repeated seed resolution and changes of traversal strategy.
+## Generic Failure Modes
 
-These cases motivate better generic shape/identity and grounding contracts,
-but do not by themselves demonstrate a faulty operator. Adding a tool named
-after either question would not test a transferable API design. We preserve
-their trajectories rather than inserting question-specific repairs or raising
-the budget for only failed tasks.
+Repeated risks include choosing the wrong relationship direction or grouping
+variable, confusing node and relationship properties, referencing a missing
+handle, failing to combine alternatives, and projecting the wrong answer shape.
+These are generic hypotheses to inspect in saved trajectories, not an assertion
+that one operator caused every mismatch.
 
 ## Evidence Limits
 
 The [worked examples](appendix-a-worked-examples.md) show a short success and
 an executed mismatch selected by an explicit QID rule, including every call's
 arguments and both baseline queries. The mismatch preserves the right facts
-but flattens a list into rows. Thus the archive's `semantic_mismatch` label also
-contains representation differences; it should not be read as uniformly false
-knowledge or failed entity grounding.
+but flattens a list into rows. Thus `semantic_mismatch` includes representation
+differences; it is not uniformly false knowledge or failed entity grounding.
 
 Frequency is not causality: difficult tasks invoke more tools and may use broad
-operators more often. We have not isolated the effect of tool count, wording,
-handles or grouping primitives with controlled ablations. The present audit
-provides hypotheses and reproducible cases, not validated explanations for
-every semantic mismatch. Full details remain in `run.jsonl` and `failures.jsonl`;
-the [results explorer](https://paoloalbano.github.io/agent-native-graph/results.html)
-loads one question at a time and links input handles to recorded producing steps.
+operators more often. We have not isolated tool count, wording, handles or
+grouping primitives with controlled ablations. Full details remain in
+`run.jsonl` and `failures.jsonl`; the
+[results explorer](https://paoloalbano.github.io/agent-native-graph/results.html)
+loads one question at a time and links handles to their recorded producing steps.

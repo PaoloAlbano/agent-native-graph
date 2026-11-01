@@ -1,5 +1,6 @@
 """Keep the paper's frozen observations grounded in saved evidence, without inference."""
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -55,7 +56,7 @@ def observations():
             "summary": json.loads((folder / "summary.json").read_text()),
             "records": [json.loads(line) for line in (folder / "run.jsonl").open() if line.strip()],
         }
-    assert len(entries) == 13  # This paper snapshot need not grow with every future contribution.
+    assert len(entries) == 12  # Three models, four profiles in the current replacement matrix.
     return entries
 
 
@@ -98,6 +99,32 @@ def test_shared_question_table_uses_the_linked_common_evaluator(observations, ev
         scores = [ana, baselines["single"], baselines["agentic"]]
         assert all(score["total"] == 100 for score in scores)
         assert row[1:] == [f"{score['correct']}/100" for score in scores]
+
+
+def test_current_matrix_covers_every_profile_and_preserves_baseline_evidence(
+    observations, evaluation
+):
+    _, report = evaluation
+    manifests = [entry["manifest"] for entry in observations.values()]
+    assert {
+        (manifest["model"], manifest["temperature"], manifest["reasoning"])
+        for manifest in manifests
+    } == {
+        (model, temperature, reasoning)
+        for model in ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "Qwen/Qwen3.5-27B")
+        for temperature in (0, 1)
+        for reasoning in ("none", "medium")
+    }
+    assert set(report["ana"]) == {manifest["run_id"] for manifest in manifests}
+    source = ROOT / report["ana_refresh"]["baseline_execution_manifest"]
+    payload = source.read_bytes()
+    assert (
+        hashlib.sha256(payload).hexdigest()
+        == report["ana_refresh"]["baseline_execution_manifest_sha256"]
+    )
+    original = json.loads(payload)
+    for field in ("baselines", "gold", "graph_sha256", "snapshot_before", "snapshot_after"):
+        assert report[field] == original[field]
 
 
 def test_qwen_error_table_separates_terminal_failures_from_recovered_timeouts(observations):
@@ -210,7 +237,7 @@ def test_worked_example_selection_ignores_baseline_outcomes(
     observations, evaluation, worked_examples
 ):
     _, report = evaluation
-    rows = observations["Q28-0M"]["records"]
+    rows = observations["Q-0M"]["records"]
     pinned = json.loads((ROOT / "data/reference_company100_qids.json").read_text())
     candidates = sorted(
         (
