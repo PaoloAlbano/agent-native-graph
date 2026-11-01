@@ -1117,7 +1117,15 @@ class Neo4jGraphBackend(AgentGraphBackend):
         else:
             raise ValueError(f"Unsupported direction: {direction}")
 
-        query = (
+        source_identity = self._identity_expr("s")
+        batch_query = (
+            f"MATCH (s) WHERE {source_identity} IN $source_ids MATCH {pattern} "
+            "WITH s, r, t UNWIND [row IN $rows WHERE "
+            f"row.source_id = {source_identity} AND NOT elementId(r) IN row.rel_ids] AS row "
+            "RETURN row.row_index AS row_index, elementId(r) AS rel_id, t "
+            "ORDER BY row_index LIMIT $limit"
+        )
+        direct_query = (
             "UNWIND $rows AS row " + self._bound_match("s", "row.source_id") + f"MATCH {pattern} "
             "WHERE NOT elementId(r) IN row.rel_ids "
             "RETURN row.row_index AS row_index, elementId(r) AS rel_id, t LIMIT $limit"
@@ -1131,7 +1139,13 @@ class Neo4jGraphBackend(AgentGraphBackend):
                     break
                 pages += 1
                 page = input_rows[page_start : page_start + page_size]
-                for record in self._run(session, query, rows=page, limit=remaining):
+                params = {"rows": page, "limit": remaining}
+                if len(page) == 1 or getattr(self, "_identity", None) is not None:
+                    query = direct_query
+                else:
+                    query = batch_query
+                    params["source_ids"] = list(dict.fromkeys(row["source_id"] for row in page))
+                for record in self._run(session, query, **params):
                     base = dict(source_handle.rows[record["row_index"]])
                     base["__rel_ids"] = [*base.get("__rel_ids", []), record["rel_id"]]
                     base[target_var] = _node_payload(record["t"])
@@ -1139,11 +1153,9 @@ class Neo4jGraphBackend(AgentGraphBackend):
                     remaining -= 1
                     if remaining <= 0:
                         break
-        source_ids = sorted({row["source_id"] for row in input_rows})
+        source_ids = list(dict.fromkeys(row["source_id"] for row in input_rows))
         count_query = (
-            "UNWIND $source_ids AS source_id "
-            + self._bound_match("s", "source_id")
-            + f"MATCH {pattern} "
+            f"MATCH (s) WHERE {source_identity} IN $source_ids MATCH {pattern} "
             f"RETURN {self._identity_expr('t')} AS entity_id"
         )
         metadata = {

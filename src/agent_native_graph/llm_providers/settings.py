@@ -21,6 +21,9 @@ class LLMCallSettings:
     max_attempts: int = 3
     retry_base_s: float = 2.0
     rate_limit_retry_s: float = 30.0
+    connect_timeout_s: float | None = None
+    write_timeout_s: float | None = None
+    pool_timeout_s: float | None = None
 
     def __post_init__(self) -> None:
         for name, low, high in (
@@ -57,6 +60,15 @@ class LLMCallSettings:
                 raise ValueError(
                     f"{name} must be finite and positive (zero allowed for retry delays)"
                 )
+        for name in ("connect_timeout_s", "write_timeout_s", "pool_timeout_s"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int | float)
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be null or finite and positive")
         if (
             type(self.enable_thinking) is not bool
             or type(self.retry_low_effort_on_length) is not bool

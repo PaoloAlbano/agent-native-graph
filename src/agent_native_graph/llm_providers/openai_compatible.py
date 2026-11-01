@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 import time
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,77 @@ class OpenAICompatibleProvider:
         self._model = model
         self._api_key = api_key
         self.settings = settings
+        self._sync_client = None
+        self._async_client = None
+        self._async_loop = None
+
+    def _timeout(self):
+        """Keep the read allowance independent from optional connection/pool overrides."""
+        overrides = {
+            phase: getattr(self.settings, f"{phase}_timeout_s")
+            for phase in ("connect", "write", "pool")
+            if getattr(self.settings, f"{phase}_timeout_s") is not None
+        }
+        return (
+            httpx.Timeout(self.settings.timeout_s, **overrides)
+            if overrides
+            else self.settings.timeout_s
+        )
+
+    def __enter__(self):
+        """Own one thread-safe connection pool for a synchronous workload."""
+        if self._sync_client is not None:
+            raise RuntimeError("The synchronous provider context is already open")
+        self._sync_client = httpx.Client(timeout=self._timeout())
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()
+
+    def close(self):
+        """Close owned synchronous connections after worker shutdown."""
+        if self._sync_client is not None:
+            client, self._sync_client = self._sync_client, None
+            client.close()
+
+    async def __aenter__(self):
+        """Own an asynchronous connection pool on the calling event loop."""
+        if self._async_client is not None:
+            raise RuntimeError("The asynchronous provider context is already open")
+        self._async_client = httpx.AsyncClient(timeout=self._timeout())
+        self._async_loop = asyncio.get_running_loop()
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        await self.aclose()
+
+    async def aclose(self):
+        """Close asynchronous connections on their owning loop and synchronous connections."""
+        if self._async_client is not None:
+            if self._async_loop is not asyncio.get_running_loop():
+                raise RuntimeError("Close the asynchronous provider on its owning event loop")
+            client, self._async_client = self._async_client, None
+            self._async_loop = None
+            await client.aclose()
+        self.close()
+
+    @contextmanager
+    def _sync_client_scope(self):
+        if self._sync_client is not None:
+            yield self._sync_client
+        else:
+            with httpx.Client(timeout=self._timeout()) as client:
+                yield client
+
+    @asynccontextmanager
+    async def _async_client_scope(self):
+        if self._async_client is not None:
+            if self._async_loop is not asyncio.get_running_loop():
+                raise RuntimeError("Use the asynchronous provider on its owning event loop")
+            yield self._async_client
+        else:
+            async with httpx.AsyncClient(timeout=self._timeout()) as client:
+                yield client
 
     @tracked_chat
     def chat(
@@ -93,31 +165,36 @@ class OpenAICompatibleProvider:
                 )
             raise RuntimeError("Use await provider.achat() inside an event loop")
         payload = self._payload(messages, tools, tool_choice, response_format)
+        with self._sync_client_scope() as client:
+            return self._send_sync(client, payload)
+
+    def _send_sync(self, client, payload):
         headers = {"Authorization": f"Bearer {self._api_key}"}
         last_error: Exception | None = None
         rate_limit_retries = 0
         http_retries = 0
         for attempt in range(self.settings.max_attempts):
             try:
-                with httpx.Client(timeout=self.settings.timeout_s) as client:
-                    data = post_chat(
-                        client, self._url, headers=headers, payload=payload, kind="initial"
-                    )
-                    data, retry_meta = self._retry_low_effort_after_length_finish(
-                        client=client,
-                        headers=headers,
-                        payload=payload,
-                        data=data,
-                    )
+                data = post_chat(
+                    client, self._url, headers=headers, payload=payload, kind="initial"
+                )
+                data, retry_meta = self._retry_low_effort_after_length_finish(
+                    client=client, headers=headers, payload=payload, data=data
+                )
                 break
             except httpx.HTTPStatusError as exc:
                 last_error = exc
-                delay, rate_limit = self._retry_delay(exc, attempt)
+                retry = self._retry_delay(exc, attempt)
+                if retry is None:
+                    raise
+                delay, rate_limit = retry
                 rate_limit_retries += int(rate_limit)
                 http_retries += int(not rate_limit)
                 time.sleep(delay)
             except httpx.HTTPError as exc:
                 last_error = exc
+                if attempt + 1 >= self.settings.max_attempts:
+                    raise
                 http_retries += 1
                 time.sleep(self.settings.retry_base_s * (attempt + 1))
         else:
@@ -164,35 +241,43 @@ class OpenAICompatibleProvider:
             )
 
     async def _send_async(self, payload):
+        async with self._async_client_scope() as client:
+            return await self._send_async_with_client(client, payload)
+
+    async def _send_async_with_client(self, client, payload):
         headers = {"Authorization": f"Bearer {self._api_key}"}
         last_error: Exception | None = None
         rate_limit_retries = 0
         http_retries = 0
         for attempt in range(self.settings.max_attempts):
             try:
-                async with httpx.AsyncClient(timeout=self.settings.timeout_s) as client:
+                data = await post_chat_async(
+                    client, self._url, headers=headers, payload=payload, kind="initial"
+                )
+                retry_payload, retry_meta = self._fallback_request(payload, data)
+                if retry_payload is not None:
                     data = await post_chat_async(
-                        client, self._url, headers=headers, payload=payload, kind="initial"
+                        client,
+                        self._url,
+                        headers=headers,
+                        payload=retry_payload,
+                        kind="low_effort_fallback",
                     )
-                    retry_payload, retry_meta = self._fallback_request(payload, data)
-                    if retry_payload is not None:
-                        data = await post_chat_async(
-                            client,
-                            self._url,
-                            headers=headers,
-                            payload=retry_payload,
-                            kind="low_effort_fallback",
-                        )
-                        retry_meta.update(low_effort_retry=True, final_thinking_effort="low")
+                    retry_meta.update(low_effort_retry=True, final_thinking_effort="low")
                 break
             except httpx.HTTPStatusError as exc:
                 last_error = exc
-                delay, rate_limit = self._retry_delay(exc, attempt)
+                retry = self._retry_delay(exc, attempt)
+                if retry is None:
+                    raise
+                delay, rate_limit = retry
                 rate_limit_retries += int(rate_limit)
                 http_retries += int(not rate_limit)
                 await asyncio.sleep(delay)
             except httpx.HTTPError as exc:
                 last_error = exc
+                if attempt + 1 >= self.settings.max_attempts:
+                    raise
                 http_retries += 1
                 await asyncio.sleep(self.settings.retry_base_s * (attempt + 1))
         else:
@@ -201,8 +286,13 @@ class OpenAICompatibleProvider:
         return self._message(data, retry_meta, attempt, rate_limit_retries, http_retries)
 
     def _retry_delay(self, exc, attempt):
-        """Preserve the existing HTTP status policy and waits on both transports."""
-        rate_limit = exc.response.status_code == 429 and attempt < self.settings.max_attempts - 1
+        """Retry transient statuses only while another attempt is available."""
+        status = exc.response.status_code
+        if attempt + 1 >= self.settings.max_attempts or (
+            status not in (408, 409, 425, 429) and not 500 <= status < 600
+        ):
+            return None
+        rate_limit = status == 429
         if rate_limit:
             print(
                 f"[llm] received 429 Too Many Requests; retrying in {self.settings.rate_limit_retry_s:g}s",
