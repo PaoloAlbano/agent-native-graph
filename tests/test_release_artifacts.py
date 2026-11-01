@@ -8,14 +8,23 @@ import shlex
 import shutil
 import subprocess
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
 import yaml
 
+from agent_native_graph import __version__
+
 ROOT = Path(__file__).resolve().parents[1]
 HELPERS = runpy.run_path(str(ROOT / ".github/release_artifacts.py"))
+
+
+def test_public_version_matches_project_and_lock():
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    assert __version__ == version
+    assert HELPERS["validate_version"](ROOT, f"v{version}") == version
 
 
 @pytest.fixture

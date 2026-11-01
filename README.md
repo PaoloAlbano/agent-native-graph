@@ -236,7 +236,7 @@ Use one worker: session state is process-local, not a shared multi-worker store.
 
 A [release guide](docs/releases.md) describes the opt-in GitHub Release workflow
 for wheels, source archives and versioned GHCR images. It includes a manual
-build/test-only mode. [Release v0.1.1](https://github.com/PaoloAlbano/agent-native-graph/releases/tag/v0.1.1)
+build/test-only mode. [Release v0.1.2](https://github.com/PaoloAlbano/agent-native-graph/releases/tag/v0.1.2)
 provides the wheel and a shared Linux amd64/arm64 service image, tested on both
 native architectures. No PyPI upload is included.
 
@@ -245,12 +245,12 @@ loading datasets or running benchmarks automatically. For a Docker Desktop
 local example, configure the URI to reach Neo4j from inside the container:
 
 ```bash
-docker pull ghcr.io/paoloalbano/agent-native-graph:0.1.1
+docker pull ghcr.io/paoloalbano/agent-native-graph:0.1.2
 docker run --rm -p 127.0.0.1:8080:8080 \
   --mount "type=bind,src=$ANA_AUTH_FILE,dst=/run/secrets/ana-auth.json,readonly" \
   -e ANA_AUTH_FILE=/run/secrets/ana-auth.json \
   -e NEO4J_URI=bolt://host.docker.internal:7687 \
-  -e NEO4J_USER -e NEO4J_PASSWORD -e NEO4J_DATABASE ghcr.io/paoloalbano/agent-native-graph:0.1.1
+  -e NEO4J_USER -e NEO4J_PASSWORD -e NEO4J_DATABASE ghcr.io/paoloalbano/agent-native-graph:0.1.2
 ```
 
 For a local source build, use `make docker-build` and replace the image name
