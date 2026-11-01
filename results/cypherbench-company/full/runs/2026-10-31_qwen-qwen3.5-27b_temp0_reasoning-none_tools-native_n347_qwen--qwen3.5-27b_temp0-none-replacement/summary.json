@@ -1,0 +1,140 @@
+{
+  "accuracy": 0.8472622478386167,
+  "avg_llm_calls": 5.268011527377522,
+  "avg_tool_calls": 5.268011527377522,
+  "executable_rate": 0.9855907780979827,
+  "failure_classes": {
+    "no_final_fetch_or_max_steps": 5,
+    "semantic_mismatch": 48
+  },
+  "failure_total": 53,
+  "llm_completion_tokens": 279683,
+  "llm_prompt_tokens": 54800845,
+  "llm_total_tokens": 55080528,
+  "matches": 294,
+  "ok": 342,
+  "request_accounting": {
+    "attempts_with_usage": 1828,
+    "attempts_without_usage": 0,
+    "failed_http_attempts": 0,
+    "failed_logical_calls": 0,
+    "finish_reasons": {
+      "tool_calls": 1828
+    },
+    "http_attempts": 1828,
+    "http_elapsed_s": 4926.21991801355,
+    "http_retry_attempts": 0,
+    "http_status_counts": {
+      "200": 1828
+    },
+    "instrumented_items": 347,
+    "logical_call_elapsed_s": 4970.3450312814675,
+    "logical_calls": 1828,
+    "low_effort_http_attempts": 0,
+    "observed_completion_responses": 1828,
+    "observed_token_details_totals": {},
+    "observed_usage_totals": {
+      "completion_tokens": 279683,
+      "prompt_tokens": 54800845,
+      "total_tokens": 55080528
+    },
+    "pending_http_attempts": 0,
+    "pending_logical_calls": 0,
+    "requests_settled": true,
+    "roles": {
+      "agent": 1828
+    },
+    "schema_version": 1,
+    "uninstrumented_items": 0,
+    "usage_field_coverage": {
+      "completion_tokens": 1828,
+      "prompt_tokens": 1828,
+      "total_tokens": 1828
+    }
+  },
+  "run_id": "2026-10-31_qwen-qwen3.5-27b_temp0_reasoning-none_tools-native_n347_qwen--qwen3.5-27b_temp0-none-replacement",
+  "tool_errors": 19,
+  "top_tools": [
+    [
+      "expand",
+      412
+    ],
+    [
+      "entity_resolve",
+      371
+    ],
+    [
+      "fetch",
+      342
+    ],
+    [
+      "pattern_query",
+      115
+    ],
+    [
+      "project",
+      111
+    ],
+    [
+      "entity_set_operation",
+      70
+    ],
+    [
+      "value_search",
+      61
+    ],
+    [
+      "schema_search",
+      55
+    ],
+    [
+      "schema_overview",
+      47
+    ],
+    [
+      "group_handle",
+      41
+    ],
+    [
+      "count_handle",
+      35
+    ],
+    [
+      "same_target_role_intersection",
+      28
+    ],
+    [
+      "schema_describe_relationship",
+      27
+    ],
+    [
+      "optional_expand_count",
+      21
+    ],
+    [
+      "constraint_query",
+      18
+    ],
+    [
+      "expand_aggregate",
+      17
+    ],
+    [
+      "summarize_handle",
+      14
+    ],
+    [
+      "compare",
+      8
+    ],
+    [
+      "top_entities_by_property",
+      7
+    ],
+    [
+      "filter",
+      7
+    ]
+  ],
+  "total": 347
+}

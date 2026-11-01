@@ -1,0 +1,626 @@
+{
+  "concurrency": 10,
+  "configuration_sha256": "e704aaee18019b72d64f3233f5488b76a586c6f024363a011ae3185315aeedeb",
+  "created_at": "2026-10-31T16:45:24.991480+00:00",
+  "git_commit": "f400e63ec389ef840dcce05f4ebced6f7f69be4a",
+  "identity": {
+    "libraries": {
+      "PyYAML": "6.0.3",
+      "httpx": "0.28.1",
+      "neo4j": "6.2.0"
+    },
+    "pyproject_sha256": "a6ae6c395a4f46438900431ba118b00f4037642944363a0a45fcd27cb6cf1012",
+    "python": "3.12.11",
+    "source_tree_sha256": "659541c5e33f78b7cbd1d4c6cb8c19f9663d87268de5843d8e37703f46d895b9",
+    "system_prompt_sha256": "7c69732818cc545953a958cb7bac9d87a2e23c4e707ea5db295375f3cc87a82b",
+    "tools_sha256": "5334197563fb9260a3d88566883b48d29846ec83c75b936bee512d9ac93f1d97",
+    "uv_lock_sha256": "6b93a6b159352b33380ad0e186957d4764804d7912c9ff4b66ea3645e3e8f093"
+  },
+  "input_hashes": {
+    "graph": "54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b",
+    "schema": "be0598beb62dd4d516c813e1078c64b3b02683a6f42ac2762e8c8f0ebafaca35",
+    "tasks": "7b4c336e5a0e1f6441daf93031b7964d5ae48db7c00be03e9530aa4360bd964f"
+  },
+  "limit": 347,
+  "llm_settings": {
+    "enable_thinking": true,
+    "frequency_penalty": null,
+    "max_attempts": 3,
+    "max_tokens": 16000,
+    "presence_penalty": null,
+    "rate_limit_retry_s": 30.0,
+    "retry_base_s": 2.0,
+    "retry_low_effort_on_length": true,
+    "seed": null,
+    "stop": null,
+    "temperature": 1.0,
+    "thinking_effort": "medium",
+    "timeout_s": 60.0,
+    "tool_choice": "auto",
+    "top_p": null
+  },
+  "max_steps": 12,
+  "max_tokens": 16000,
+  "model": "openai/gpt-oss-120b",
+  "options": {
+    "auto_fetch_on_done": false,
+    "enable_planning_tools": false,
+    "enable_runner_guardrails": false,
+    "enable_thinking": true,
+    "evaluation_fetch_all_pages": true,
+    "neo4j_query_timeout_s": 30,
+    "result_policy": "bounded-v1",
+    "schema_entry": "overview",
+    "thinking_effort": "medium",
+    "verify_graph_block": true,
+    "wrapper_planning": false
+  },
+  "profile": "temp1-medium",
+  "profile_sha256": "794741a227eb0db93d8946fb2b053a07b697127ff86d41b10d3f6293af4a1a95",
+  "provider": "openai-compatible",
+  "reasoning": "medium",
+  "schema_source": "shared-live-preflight-v1",
+  "shared_preflight": {
+    "database": "neo4j",
+    "graph_sha256": "54d15b5db4c30b9d7d0e31cbc30ca7c144d3e2cad30bddf8d92390a095f0b82b",
+    "schema": {
+      "label_relationships": [
+        {
+          "relationship_type": "basedIn",
+          "source_label": "Company",
+          "target_label": "Country"
+        },
+        {
+          "relationship_type": "basedIn",
+          "source_label": "Company",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "basedIn",
+          "source_label": "Entity",
+          "target_label": "Country"
+        },
+        {
+          "relationship_type": "basedIn",
+          "source_label": "Entity",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "foundedBy",
+          "source_label": "Company",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "foundedBy",
+          "source_label": "Company",
+          "target_label": "Person"
+        },
+        {
+          "relationship_type": "foundedBy",
+          "source_label": "Entity",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "foundedBy",
+          "source_label": "Entity",
+          "target_label": "Person"
+        },
+        {
+          "relationship_type": "hasBoardMember",
+          "source_label": "Company",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "hasBoardMember",
+          "source_label": "Company",
+          "target_label": "Person"
+        },
+        {
+          "relationship_type": "hasBoardMember",
+          "source_label": "Entity",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "hasBoardMember",
+          "source_label": "Entity",
+          "target_label": "Person"
+        },
+        {
+          "relationship_type": "hasCEO",
+          "source_label": "Company",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "hasCEO",
+          "source_label": "Company",
+          "target_label": "Person"
+        },
+        {
+          "relationship_type": "hasCEO",
+          "source_label": "Entity",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "hasCEO",
+          "source_label": "Entity",
+          "target_label": "Person"
+        },
+        {
+          "relationship_type": "operatesIn",
+          "source_label": "Company",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "operatesIn",
+          "source_label": "Company",
+          "target_label": "Industry"
+        },
+        {
+          "relationship_type": "operatesIn",
+          "source_label": "Entity",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "operatesIn",
+          "source_label": "Entity",
+          "target_label": "Industry"
+        },
+        {
+          "relationship_type": "subsidiaryOf",
+          "source_label": "Company",
+          "target_label": "Company"
+        },
+        {
+          "relationship_type": "subsidiaryOf",
+          "source_label": "Company",
+          "target_label": "Entity"
+        },
+        {
+          "relationship_type": "subsidiaryOf",
+          "source_label": "Entity",
+          "target_label": "Company"
+        },
+        {
+          "relationship_type": "subsidiaryOf",
+          "source_label": "Entity",
+          "target_label": "Entity"
+        }
+      ],
+      "labels": [
+        "Company",
+        "Country",
+        "Entity",
+        "Industry",
+        "Person"
+      ],
+      "node_properties": [
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Company",
+            "Entity"
+          ],
+          "nodeType": ":`Company`:`Entity`",
+          "propertyName": "description",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Company",
+            "Entity"
+          ],
+          "nodeType": ":`Company`:`Entity`",
+          "propertyName": "launch_year",
+          "propertyTypes": [
+            "INTEGER NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Country",
+            "Entity"
+          ],
+          "nodeType": ":`Country`:`Entity`",
+          "propertyName": "description",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Industry"
+          ],
+          "nodeType": ":`Entity`:`Industry`",
+          "propertyName": "description",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "country_of_citizenship",
+          "propertyTypes": [
+            "LIST<STRING NOT NULL> NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "date_of_birth",
+          "propertyTypes": [
+            "DATE NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "date_of_death",
+          "propertyTypes": [
+            "DATE NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "description",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "gender",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": false,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "place_of_birth",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Company",
+            "Entity"
+          ],
+          "nodeType": ":`Company`:`Entity`",
+          "propertyName": "aliases",
+          "propertyTypes": [
+            "LIST<NOTHING> NOT NULL",
+            "LIST<STRING NOT NULL> NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Company",
+            "Entity"
+          ],
+          "nodeType": ":`Company`:`Entity`",
+          "propertyName": "eid",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Company",
+            "Entity"
+          ],
+          "nodeType": ":`Company`:`Entity`",
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Company",
+            "Entity"
+          ],
+          "nodeType": ":`Company`:`Entity`",
+          "propertyName": "name",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Country",
+            "Entity"
+          ],
+          "nodeType": ":`Country`:`Entity`",
+          "propertyName": "aliases",
+          "propertyTypes": [
+            "LIST<NOTHING> NOT NULL",
+            "LIST<STRING NOT NULL> NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Country",
+            "Entity"
+          ],
+          "nodeType": ":`Country`:`Entity`",
+          "propertyName": "eid",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Country",
+            "Entity"
+          ],
+          "nodeType": ":`Country`:`Entity`",
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Country",
+            "Entity"
+          ],
+          "nodeType": ":`Country`:`Entity`",
+          "propertyName": "name",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Industry"
+          ],
+          "nodeType": ":`Entity`:`Industry`",
+          "propertyName": "aliases",
+          "propertyTypes": [
+            "LIST<NOTHING> NOT NULL",
+            "LIST<STRING NOT NULL> NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Industry"
+          ],
+          "nodeType": ":`Entity`:`Industry`",
+          "propertyName": "eid",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Industry"
+          ],
+          "nodeType": ":`Entity`:`Industry`",
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Industry"
+          ],
+          "nodeType": ":`Entity`:`Industry`",
+          "propertyName": "name",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "aliases",
+          "propertyTypes": [
+            "LIST<NOTHING> NOT NULL",
+            "LIST<STRING NOT NULL> NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "eid",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        },
+        {
+          "mandatory": true,
+          "nodeLabels": [
+            "Entity",
+            "Person"
+          ],
+          "nodeType": ":`Entity`:`Person`",
+          "propertyName": "name",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ]
+        }
+      ],
+      "relationship_properties": [
+        {
+          "mandatory": false,
+          "propertyName": "end_year",
+          "propertyTypes": [
+            "INTEGER NOT NULL"
+          ],
+          "relType": ":`hasBoardMember`"
+        },
+        {
+          "mandatory": false,
+          "propertyName": "end_year",
+          "propertyTypes": [
+            "INTEGER NOT NULL"
+          ],
+          "relType": ":`hasCEO`"
+        },
+        {
+          "mandatory": false,
+          "propertyName": "start_year",
+          "propertyTypes": [
+            "INTEGER NOT NULL"
+          ],
+          "relType": ":`hasBoardMember`"
+        },
+        {
+          "mandatory": false,
+          "propertyName": "start_year",
+          "propertyTypes": [
+            "INTEGER NOT NULL"
+          ],
+          "relType": ":`hasCEO`"
+        },
+        {
+          "mandatory": true,
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ],
+          "relType": ":`basedIn`"
+        },
+        {
+          "mandatory": true,
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ],
+          "relType": ":`foundedBy`"
+        },
+        {
+          "mandatory": true,
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ],
+          "relType": ":`hasBoardMember`"
+        },
+        {
+          "mandatory": true,
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ],
+          "relType": ":`hasCEO`"
+        },
+        {
+          "mandatory": true,
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ],
+          "relType": ":`operatesIn`"
+        },
+        {
+          "mandatory": true,
+          "propertyName": "id",
+          "propertyTypes": [
+            "STRING NOT NULL"
+          ],
+          "relType": ":`subsidiaryOf`"
+        }
+      ],
+      "relationship_types": [
+        "basedIn",
+        "foundedBy",
+        "hasBoardMember",
+        "hasCEO",
+        "operatesIn",
+        "subsidiaryOf"
+      ]
+    },
+    "schema_prompt": "{\"label_relationships\":[{\"relationship_type\":\"basedIn\",\"source_label\":\"Company\",\"target_label\":\"Country\"},{\"relationship_type\":\"basedIn\",\"source_label\":\"Company\",\"target_label\":\"Entity\"},{\"relationship_type\":\"basedIn\",\"source_label\":\"Entity\",\"target_label\":\"Country\"},{\"relationship_type\":\"basedIn\",\"source_label\":\"Entity\",\"target_label\":\"Entity\"},{\"relationship_type\":\"foundedBy\",\"source_label\":\"Company\",\"target_label\":\"Entity\"},{\"relationship_type\":\"foundedBy\",\"source_label\":\"Company\",\"target_label\":\"Person\"},{\"relationship_type\":\"foundedBy\",\"source_label\":\"Entity\",\"target_label\":\"Entity\"},{\"relationship_type\":\"foundedBy\",\"source_label\":\"Entity\",\"target_label\":\"Person\"},{\"relationship_type\":\"hasBoardMember\",\"source_label\":\"Company\",\"target_label\":\"Entity\"},{\"relationship_type\":\"hasBoardMember\",\"source_label\":\"Company\",\"target_label\":\"Person\"},{\"relationship_type\":\"hasBoardMember\",\"source_label\":\"Entity\",\"target_label\":\"Entity\"},{\"relationship_type\":\"hasBoardMember\",\"source_label\":\"Entity\",\"target_label\":\"Person\"},{\"relationship_type\":\"hasCEO\",\"source_label\":\"Company\",\"target_label\":\"Entity\"},{\"relationship_type\":\"hasCEO\",\"source_label\":\"Company\",\"target_label\":\"Person\"},{\"relationship_type\":\"hasCEO\",\"source_label\":\"Entity\",\"target_label\":\"Entity\"},{\"relationship_type\":\"hasCEO\",\"source_label\":\"Entity\",\"target_label\":\"Person\"},{\"relationship_type\":\"operatesIn\",\"source_label\":\"Company\",\"target_label\":\"Entity\"},{\"relationship_type\":\"operatesIn\",\"source_label\":\"Company\",\"target_label\":\"Industry\"},{\"relationship_type\":\"operatesIn\",\"source_label\":\"Entity\",\"target_label\":\"Entity\"},{\"relationship_type\":\"operatesIn\",\"source_label\":\"Entity\",\"target_label\":\"Industry\"},{\"relationship_type\":\"subsidiaryOf\",\"source_label\":\"Company\",\"target_label\":\"Company\"},{\"relationship_type\":\"subsidiaryOf\",\"source_label\":\"Company\",\"target_label\":\"Entity\"},{\"relationship_type\":\"subsidiaryOf\",\"source_label\":\"Entity\",\"target_label\":\"Company\"},{\"relationship_type\":\"subsidiaryOf\",\"source_label\":\"Entity\",\"target_label\":\"Entity\"}],\"labels\":[\"Company\",\"Country\",\"Entity\",\"Industry\",\"Person\"],\"node_properties\":[{\"mandatory\":false,\"nodeLabels\":[\"Company\",\"Entity\"],\"nodeType\":\":`Company`:`Entity`\",\"propertyName\":\"description\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Company\",\"Entity\"],\"nodeType\":\":`Company`:`Entity`\",\"propertyName\":\"launch_year\",\"propertyTypes\":[\"INTEGER NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Country\",\"Entity\"],\"nodeType\":\":`Country`:`Entity`\",\"propertyName\":\"description\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Industry\"],\"nodeType\":\":`Entity`:`Industry`\",\"propertyName\":\"description\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"country_of_citizenship\",\"propertyTypes\":[\"LIST<STRING NOT NULL> NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"date_of_birth\",\"propertyTypes\":[\"DATE NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"date_of_death\",\"propertyTypes\":[\"DATE NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"description\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"gender\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":false,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"place_of_birth\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Company\",\"Entity\"],\"nodeType\":\":`Company`:`Entity`\",\"propertyName\":\"aliases\",\"propertyTypes\":[\"LIST<NOTHING> NOT NULL\",\"LIST<STRING NOT NULL> NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Company\",\"Entity\"],\"nodeType\":\":`Company`:`Entity`\",\"propertyName\":\"eid\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Company\",\"Entity\"],\"nodeType\":\":`Company`:`Entity`\",\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Company\",\"Entity\"],\"nodeType\":\":`Company`:`Entity`\",\"propertyName\":\"name\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Country\",\"Entity\"],\"nodeType\":\":`Country`:`Entity`\",\"propertyName\":\"aliases\",\"propertyTypes\":[\"LIST<NOTHING> NOT NULL\",\"LIST<STRING NOT NULL> NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Country\",\"Entity\"],\"nodeType\":\":`Country`:`Entity`\",\"propertyName\":\"eid\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Country\",\"Entity\"],\"nodeType\":\":`Country`:`Entity`\",\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Country\",\"Entity\"],\"nodeType\":\":`Country`:`Entity`\",\"propertyName\":\"name\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Industry\"],\"nodeType\":\":`Entity`:`Industry`\",\"propertyName\":\"aliases\",\"propertyTypes\":[\"LIST<NOTHING> NOT NULL\",\"LIST<STRING NOT NULL> NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Industry\"],\"nodeType\":\":`Entity`:`Industry`\",\"propertyName\":\"eid\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Industry\"],\"nodeType\":\":`Entity`:`Industry`\",\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Industry\"],\"nodeType\":\":`Entity`:`Industry`\",\"propertyName\":\"name\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"aliases\",\"propertyTypes\":[\"LIST<NOTHING> NOT NULL\",\"LIST<STRING NOT NULL> NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"eid\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"]},{\"mandatory\":true,\"nodeLabels\":[\"Entity\",\"Person\"],\"nodeType\":\":`Entity`:`Person`\",\"propertyName\":\"name\",\"propertyTypes\":[\"STRING NOT NULL\"]}],\"relationship_properties\":[{\"mandatory\":false,\"propertyName\":\"end_year\",\"propertyTypes\":[\"INTEGER NOT NULL\"],\"relType\":\":`hasBoardMember`\"},{\"mandatory\":false,\"propertyName\":\"end_year\",\"propertyTypes\":[\"INTEGER NOT NULL\"],\"relType\":\":`hasCEO`\"},{\"mandatory\":false,\"propertyName\":\"start_year\",\"propertyTypes\":[\"INTEGER NOT NULL\"],\"relType\":\":`hasBoardMember`\"},{\"mandatory\":false,\"propertyName\":\"start_year\",\"propertyTypes\":[\"INTEGER NOT NULL\"],\"relType\":\":`hasCEO`\"},{\"mandatory\":true,\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"],\"relType\":\":`basedIn`\"},{\"mandatory\":true,\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"],\"relType\":\":`foundedBy`\"},{\"mandatory\":true,\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"],\"relType\":\":`hasBoardMember`\"},{\"mandatory\":true,\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"],\"relType\":\":`hasCEO`\"},{\"mandatory\":true,\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"],\"relType\":\":`operatesIn`\"},{\"mandatory\":true,\"propertyName\":\"id\",\"propertyTypes\":[\"STRING NOT NULL\"],\"relType\":\":`subsidiaryOf`\"}],\"relationship_types\":[\"basedIn\",\"foundedBy\",\"hasBoardMember\",\"hasCEO\",\"operatesIn\",\"subsidiaryOf\"]}",
+    "schema_prompt_sha256": "77046a4893fc1a157958765f12c9c3b33bda62cf1965b7ba70c0b4b1dc9d3f0a",
+    "schema_sha256": "77046a4893fc1a157958765f12c9c3b33bda62cf1965b7ba70c0b4b1dc9d3f0a",
+    "snapshot": {
+      "edges": {
+        "count": 299581,
+        "sha256": "d12781227b7e08521aa7b5b12166a5c9332fa87976841ac07e5ab7791b6976b2"
+      },
+      "nodes": {
+        "count": 581306,
+        "sha256": "8b8da7bfedd360c6c4895e49ab593614e1f949cf6d5ce94eee485ca038713e8b"
+      }
+    },
+    "version": "shared-preflight-v1"
+  },
+  "task_signature_sha256": "5d34bf05e99fb05bb44aa9da41f6de6a2851bd60d3c8e575a3031cde1a901bd7",
+  "task_timeout_s": null,
+  "temperature": 1.0,
+  "tool_choice": "auto",
+  "tool_mode": "native",
+  "version": 2
+}

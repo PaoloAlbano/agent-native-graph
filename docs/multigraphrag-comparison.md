@@ -84,79 +84,59 @@ not every historical experimental condition identical.
 
 ### Saved Query Re-execution
 
-The currently selected evaluation,
-`results/cypherbench-company/query-reexecution/2026-10-29-three-model-matrix/`, contains
-a manifest, 100 golden-query executions and twenty-four logical files of 100 baseline-query
-executions. It covers all thirteen current ANA full runs, including all four
-GPT-OSS-20B profiles. Previous evaluations, including `2026-10-28-qwen-matrix/`,
-retain byte-identical manifests and reconstructible JSONL evidence. All sixteen previously evaluated
-baseline scores were reproduced; eight newly evaluated baselines complete the
-GPT-OSS-20B matrix. In total, 2,500 saved queries were attempted with
-no model calls. Missing future comparisons are still explicitly marked rather
-than silently borrowing another profile's baseline.
-It is a derived evaluation, not a new LLM run or a copy of the baseline archive.
-The source commit, trace checksums, QID hash, ANA run hashes, comparator checksum
-and graph-content fingerprints are recorded. Nodes, labels, properties, edge
-types, endpoints and multiplicities are checked against the dataset file before
-execution; the database fingerprint is checked again afterwards.
+The selected comparison is
+`results/cypherbench-company/query-reexecution/current-ana-matrix/`.
+It covers all twelve current ANA full runs and twenty-four matched historical
+baseline runs on the pinned 100 QIDs. The original baseline evaluation contains
+100 golden-query executions and 2,400 baseline-query attempts.
 
-All queries are checked with EXPLAIN, executed in read mode with a 30-second
-transaction timeout and rolled back. The row limit is 100,000; errors and
-exceeded limits are failures, never partial successes. Queries are not repaired.
-ANA archived rows and baseline re-executed rows use the same exact comparator:
-row order is ignored, but duplicates and column order matter. Source judge
-verdicts remain separate. No LLM or database calls happen during the site build.
+The current refresh re-scores the new ANA saved rows and **reuses unchanged**
+gold and baseline execution records. Its `ana_refresh` field identifies the
+original evaluation manifest, checksum and execution date. Baseline manifests,
+trace hashes, row payloads, execution errors and scores are not regenerated or
+rewritten. This refresh performs no LLM calls and no database queries. The
+storage index reuses the existing content-addressed objects.
 
-99/100 golden queries reproduce the expected rows. QID
-`8536d1ef-cb04-4bc6-8f9a-4aff1279dc0f` returns a different youngest board member;
-all 100 cases remain included in the published scores. This is a known
-golden-answer discrepancy. The saved manifest retains the
-diagnostic 99-case counts, but they are not the site's comparison metric.
-Re-execution verifies the current common graph, not the undocumented historical
-graph used to generate the external queries. This is query-result correctness,
-not end-to-end answer judging or a controlled causal estimate of improvement.
+The original saved-query evaluation checked the full graph against the dataset
+before execution and again afterwards. Queries were checked with EXPLAIN,
+executed in read mode with a 30-second transaction timeout and rolled back.
+The row limit was 100,000; errors and exceeded limits count as failures, never
+partial successes. Queries were not repaired. Current ANA graph-integrity
+reports independently verify the same graph content. The common comparator
+ignores row order but preserves duplicate multiplicity and column order.
 
-For the two October 27 ANA runs, the common metric on the pinned 100 QIDs is:
+99/100 golden queries reproduce expected rows. QID
+`8536d1ef-cb04-4bc6-8f9a-4aff1279dc0f` returns a different youngest board
+member. All 100 cases remain in the primary denominator; diagnostic 99-case
+counts do not replace it.
 
-| GPT-OSS-120B requested profile | ANA exact | Direct Cypher re-executed exact | Multi-agent re-executed exact |
+| Observation | ANA / 100 | Direct / 100 | Multi-agent / 100 |
 | --- | ---: | ---: | ---: |
-| temp 0, reasoning medium | 86/100 | 63/100 | 68/100 |
-| temp 1, reasoning off | 86/100 | 61/100 | 70/100 |
+| G-0M | 89/100 | 63/100 | 68/100 |
+| G-0N | 90/100 | 66/100 | 65/100 |
+| G-1M | 88/100 | 63/100 | 68/100 |
+| G-1N | 89/100 | 61/100 | 70/100 |
+| Q-0M | 89/100 | 64/100 | 67/100 |
+| Q-0N | 84/100 | 47/100 | 48/100 |
+| Q-1M | 82/100 | 59/100 | 62/100 |
+| Q-1N | 79/100 | 40/100 | 50/100 |
+| S-0M | 71/100 | 64/100 | 60/100 |
+| S-0N | 67/100 | 66/100 | 67/100 |
+| S-1M | 65/100 | 63/100 | 66/100 |
+| S-1N | 65/100 | 59/100 | 68/100 |
 
-These are not the full-split ANA scores of 302/347 and 295/347. The denominator
-and comparator are shared within this table, but historical generation
-conditions still differ as described above. Original judge scores remain in
-their own website table and are not substituted for these query-result scores.
+Observation prefixes denote GPT-OSS-120B (G), GPT-OSS-20B (S) and Qwen3.5-27B
+(Q); suffixes denote temperature and requested reasoning none (N) or medium
+(M). Linked full-run manifests and call means are in the
+[paper results](../paper/07-results.md). These are pinned-subset scores, not
+the 347-question ANA scores.
 
-For the three October 28 Qwen3.5-27B runs, the same metric is now complete:
-
-| Qwen3.5-27B requested profile | ANA exact | Direct Cypher re-executed exact | Multi-agent re-executed exact |
-| --- | ---: | ---: | ---: |
-| temp 0, reasoning medium | 85/100 | 64/100 | 67/100 |
-| temp 1, reasoning off | 79/100 | 40/100 | 50/100 |
-| temp 1, reasoning medium | 87/100 | 59/100 | 62/100 |
-
-The corresponding direct/multi-agent query-error counts are 1/0, 2/8 and 2/4.
-Errors remain failures in the full denominator, not exclusions. These exact
-result scores do not replace the original source LLM-judge scores and are not
-the ANA full-split results of 290/347, 273/347 and 292/347. Individual questions
-and the three saved trajectories are available from each comparison page.
-
-For GPT-OSS-20B, all four pinned reference pairs exist and cover the same 100 QIDs:
-
-| GPT-OSS-20B requested profile | ANA exact | Direct Cypher re-executed exact | Multi-agent re-executed exact |
-| --- | ---: | ---: | ---: |
-| temp 0, reasoning off | 60/100 | 66/100 | 67/100 |
-| temp 0, reasoning medium | 62/100 | 64/100 | 60/100 |
-| temp 1, reasoning off | 70/100 | 59/100 | 68/100 |
-| temp 1, reasoning medium | 63/100 | 63/100 | 66/100 |
-
-The direct/multi-agent query-error counts are respectively 1/1, 2/3, 1/2 and
-3/1. ANA does not dominate this matrix: only T1/off beats both baselines.
-These are historical generation comparisons, not shared-preflight experiments.
-No new full-split baseline inference was needed to fill these existing 100-QID
-comparisons; full 347-question, shared-preflight baseline generations remain
-future experiments rather than missing values invented from the subset.
+All current ANA runs use shared graph/schema preflight and bounded-v1 result
+handling. The external generations remain historical and did not use that
+treatment. Reusing their verified query executions aligns retrieval evaluation,
+not generation prompts, budgets or served model revisions. Original source
+LLM-judge scores remain a separate website table. No controlled causal claim
+or new full-split baseline inference follows from this comparison.
 
 Baseline call logs remain incomplete and expose no uniform token-usage totals.
 The site reports logged baseline calls separately from ANA request counters;
@@ -173,10 +153,10 @@ evaluator calls, so they cannot support a total-cost ranking.
 
 | Profile | ANA mean LLM calls | ANA mean tool calls | Direct mean logged calls | Multi-agent mean logged calls | ANA observed total tokens |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| T0/none | 6.67 | 6.66 | 2.40 | 6.60 | 15118704 |
-| T0/medium | 6.04 | 6.01 | 2.50 | 7.08 | 13560964 |
-| T1/none | 5.51 | 5.46 | 2.43 | 6.42 | 12407671 |
-| T1/medium | 5.56 | 5.50 | 2.40 | 6.58 | 12660250 |
+| T0/none | 5.55 | 5.52 | 2.40 | 6.60 | 13117637 |
+| T0/medium | 5.36 | 5.33 | 2.50 | 7.08 | 12633614 |
+| T1/none | 5.51 | 5.44 | 2.43 | 6.42 | 13103556 |
+| T1/medium | 5.44 | 5.35 | 2.40 | 6.58 | 13029193 |
 
 Baseline token totals and comparable tool-call counters are unavailable, not
 zero. Source logs are pinned with the same commit as the accuracy table; ANA

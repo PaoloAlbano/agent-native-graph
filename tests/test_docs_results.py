@@ -116,7 +116,9 @@ def test_evidence_summary_retains_repeats_and_escapes_model_names():
     assert "<td>3</td><td>60.0% &ndash; 70.0%</td>" in html
     assert "&lt;model&gt;" in html and "<model>" not in html
     assert "neither confidence intervals nor averages" in html
-    assert "shared-preflight diagnostics" in html
+    assert "content-verified shared preflight" in html
+    assert "bounded-v1" in html
+    assert "External baseline generations remain historical" in html
 
 
 def test_run_navigation_uses_stable_labels_without_dates(tmp_path):

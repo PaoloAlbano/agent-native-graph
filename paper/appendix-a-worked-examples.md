@@ -3,16 +3,17 @@
 `ANA-PAPER-WORKED-EXAMPLES`
 
 These examples illustrate the measured interface, not newly generated ideal
-plans. Both come from Q28-0M: Qwen3.5-27B, temperature 0, requested medium
+plans. Both come from Q-0M: Qwen3.5-27B, temperature 0, requested medium
 thinking, native tools, `auto`, 16,000 output tokens and a 12-step budget.
-The [source manifest](../results/cypherbench-company/full/runs/2026-10-28_qwen-qwen3.5-27b_temp0_reasoning-medium_tools-native_n347_2026-10-28t10-49-03.059153-00-00/manifest.json)
-and adjacent `run.jsonl` retain complete responses. The
-[evaluation manifest](../results/cypherbench-company/query-reexecution/2026-10-28-qwen-matrix/manifest.json)
+The [source manifest](../results/cypherbench-company/full/runs/2026-10-31_qwen-qwen3.5-27b_temp0_reasoning-medium_tools-native_n347_qwen--qwen3.5-27b_temp0-medium-replacement/manifest.json)
+and adjacent `run.jsonl` retain complete responses. Shared preflight also supplies initial schema evidence;
+a schema tool call is not required in every trajectory. The
+[evaluation manifest](../results/cypherbench-company/query-reexecution/current-ana-matrix/manifest.json)
 pins both external baseline traces, their commit and re-executed rows.
 
 ## Selection Rule And Presentation
 
-Within Q28-0M, restrict to the pinned 100 QIDs, exclude the known non-reproduced
+Within Q-0M, restrict to the pinned 100 QIDs, exclude the known non-reproduced
 gold case, require at most six recorded steps, one to five expected rows and
 zero recorded tool errors. Sort by QID and select the first correct case and
 the first executed `semantic_mismatch` case. Baseline outcomes do not enter
@@ -27,7 +28,7 @@ are the historical workflow-local identifiers, not reusable live server tokens.
 The expected and final rows below are complete for these small answers.
 No raw reasoning text was archived; the explanations are analyst commentary.
 
-## A.1 Correct Constraints, With A Redundant Grounding Step
+## A.1 Composed Constraints, Then Fetch
 
 QID: `01fa1a43-2752-42bd-8e99-720b4e8204cf`.
 
@@ -44,52 +45,86 @@ MATCH (n:Company)-[r0:hasCEO]->(m0:Person {name: 'Makoto Uchida'}),(n:Company)<-
 
 ```json
 {
-  "observation": "Q28-0M",
+  "observation": "Q-0M",
   "qid": "01fa1a43-2752-42bd-8e99-720b4e8204cf",
-  "expected": [["Nissan Motor Co. Ltd."]],
-  "rows": [["Nissan Motor Co. Ltd."]],
+  "expected": [
+    [
+      "Nissan Motor Co. Ltd."
+    ]
+  ],
+  "rows": [
+    [
+      "Nissan Motor Co. Ltd."
+    ]
+  ],
   "ok": true,
   "matches_answer_json": true,
   "calls": [
     {
-      "action": {"tool": "schema_overview", "args": {}},
-      "result_excerpt": {
-        "labels": [{"label": "Company"}, {"label": "Country"}, {"label": "Industry"}, {"label": "Person"}]
-      }
-    },
-    {
       "action": {
-        "tool": "entity_resolve",
-        "args": {"as": "person", "label": "Person", "limit": 5, "text": "Makoto Uchida"}
-      },
-      "result_excerpt": {
-        "handle": "h1", "kind": "rows", "entity_variables": ["person"],
-        "matched_count": 1, "preview": ["Makoto Uchida"]
-      }
-    },
-    {
-      "action": {
-        "tool": "constraint_query",
         "args": {
-          "find": {"as": "company", "label": "Company"},
+          "find": {
+            "as": "company",
+            "label": "Company"
+          },
           "return_mode": "names",
           "return_property": "name",
           "where": [
-            {"direction": "out", "op": "eq", "property": "name", "relationship_type": "hasCEO", "target_label": "Person", "value": "Makoto Uchida"},
-            {"direction": "in", "op": "eq", "property": "name", "relationship_type": "subsidiaryOf", "target_label": "Company", "value": "Nissan New Zealand"}
+            {
+              "direction": "out",
+              "op": "eq",
+              "property": "name",
+              "relationship_type": "hasCEO",
+              "target_label": "Person",
+              "value": "Makoto Uchida"
+            },
+            {
+              "direction": "in",
+              "op": "eq",
+              "property": "name",
+              "relationship_type": "subsidiaryOf",
+              "target_label": "Company",
+              "value": "Nissan New Zealand"
+            }
           ]
-        }
+        },
+        "tool": "constraint_query"
       },
       "result_excerpt": {
-        "handle": "h2", "kind": "table", "columns": ["name"], "entity_variables": [],
-        "matched_count": 1, "preview": [{"name": "Nissan Motor Co. Ltd."}]
+        "columns": [
+          "name"
+        ],
+        "entity_variables": [],
+        "handle": "h1",
+        "kind": "table",
+        "matched_count": 1,
+        "preview": [
+          {
+            "name": "Nissan Motor Co. Ltd."
+          }
+        ],
+        "truncated": false
       }
     },
     {
-      "action": {"tool": "fetch", "args": {"from": "h2"}},
+      "action": {
+        "args": {
+          "from": "h1"
+        },
+        "tool": "fetch"
+      },
       "result_excerpt": {
-        "columns": ["name"], "rows": [["Nissan Motor Co. Ltd."]],
-        "returned_count": 1, "next_offset": null, "truncated": false
+        "columns": [
+          "name"
+        ],
+        "next_offset": null,
+        "returned_count": 1,
+        "rows": [
+          [
+            "Nissan Motor Co. Ltd."
+          ]
+        ],
+        "truncated": false
       }
     }
   ]
@@ -97,11 +132,9 @@ MATCH (n:Company)-[r0:hasCEO]->(m0:Person {name: 'Makoto Uchida'}),(n:Company)<-
 ```
 
 The two relationship constraints select the same company. The directions matter:
-the company points to its CEO, while a subsidiary points to its parent. `h2` is
-a scalar table, then fetched as the answer. `h1` is not consumed by
-`constraint_query`: the model restates the name instead. This successful trace
-therefore does not demonstrate a minimal plan or reuse of every grounded handle.
-It contains four LLM calls and four tool calls.
+the company points to its CEO, while a subsidiary points to its parent. The
+scalar table h1 is fetched as the answer. This recorded trajectory contains two
+LLM calls and two tool calls; it does not need a separate entity-resolution step.
 
 **Saved baseline query:** the direct and multi-agent final query strings are
 identical for this question, so the shared string is shown once:
@@ -135,52 +168,141 @@ MATCH (n:Person)<-[r0:foundedBy]-(m0:Company {name: 'Global Market Insite'}),(n:
 
 ```json
 {
-  "observation": "Q28-0M",
+  "observation": "Q-0M",
   "qid": "1b64800c-e1b6-4227-8319-d80288b85362",
-  "expected": [["Rob Monster", ["Kingdom of the Netherlands", "United States of America"]]],
-  "rows": [["Rob Monster", "Kingdom of the Netherlands"], ["Rob Monster", "United States of America"]],
+  "expected": [
+    [
+      "Rob Monster",
+      [
+        "Kingdom of the Netherlands",
+        "United States of America"
+      ]
+    ]
+  ],
+  "rows": [
+    [
+      "Rob Monster",
+      "Kingdom of the Netherlands"
+    ],
+    [
+      "Rob Monster",
+      "United States of America"
+    ]
+  ],
   "ok": true,
   "matches_answer_json": false,
   "calls": [
     {
-      "action": {"tool": "schema_overview", "args": {}},
+      "action": {
+        "args": {
+          "as": "company",
+          "label": "Company",
+          "limit": 5,
+          "text": "Global Market Insite"
+        },
+        "tool": "entity_resolve"
+      },
       "result_excerpt": {
-        "labels": [{"label": "Company"}, {"label": "Country"}, {"label": "Industry"}, {"label": "Person"}]
+        "columns": [],
+        "entity_variables": [
+          "company"
+        ],
+        "handle": "h1",
+        "kind": "rows",
+        "matched_count": 1,
+        "preview": [
+          "Global Market Insite"
+        ],
+        "truncated": false
       }
     },
     {
       "action": {
-        "tool": "same_target_role_intersection",
         "args": {
-          "filters": [{"op": "eq", "property": "name", "value": "Global Market Insite", "var": "company"}],
+          "filters": [
+            {
+              "op": "eq",
+              "property": "name",
+              "value": "Global Market Insite",
+              "var": "company"
+            }
+          ],
           "keep_entities": false,
           "relationships": [
-            {"direction": "in", "relationship_type": "foundedBy"},
-            {"direction": "in", "relationship_type": "hasCEO"}
+            {
+              "direction": "in",
+              "relationship_type": "foundedBy"
+            },
+            {
+              "direction": "in",
+              "relationship_type": "hasCEO"
+            }
           ],
           "select": [
-            {"alias": "name", "property": "name", "var": "person"},
-            {"alias": "country_of_citizenship", "explode": true, "property": "country_of_citizenship", "var": "person"}
+            {
+              "alias": "name",
+              "property": "name",
+              "var": "person"
+            },
+            {
+              "alias": "country_of_citizenship",
+              "explode": true,
+              "property": "country_of_citizenship",
+              "var": "person"
+            }
           ],
           "source_label": "Person",
           "target_label": "Company"
-        }
+        },
+        "tool": "same_target_role_intersection"
       },
       "result_excerpt": {
-        "handle": "h1", "kind": "table", "columns": ["name", "country_of_citizenship"],
-        "entity_variables": [], "matched_count": 2,
+        "columns": [
+          "name",
+          "country_of_citizenship"
+        ],
+        "entity_variables": [],
+        "handle": "h2",
+        "kind": "table",
+        "matched_count": 2,
         "preview": [
-          {"country_of_citizenship": "Kingdom of the Netherlands", "name": "Rob Monster"},
-          {"country_of_citizenship": "United States of America", "name": "Rob Monster"}
-        ]
+          {
+            "country_of_citizenship": "Kingdom of the Netherlands",
+            "name": "Rob Monster"
+          },
+          {
+            "country_of_citizenship": "United States of America",
+            "name": "Rob Monster"
+          }
+        ],
+        "truncated": false
       }
     },
     {
-      "action": {"tool": "fetch", "args": {"from": "h1"}},
+      "action": {
+        "args": {
+          "from": "h2"
+        },
+        "tool": "fetch"
+      },
       "result_excerpt": {
-        "columns": ["name", "country_of_citizenship"],
-        "rows": [["Rob Monster", "Kingdom of the Netherlands"], ["Rob Monster", "United States of America"]],
-        "returned_count": 2, "next_offset": null, "truncated": false
+        "columns": [
+          "name",
+          "country_of_citizenship"
+        ],
+        "next_offset": null,
+        "returned_count": 2,
+        "rows": [
+          [
+            "Rob Monster",
+            "Kingdom of the Netherlands"
+          ],
+          [
+            "Rob Monster",
+            "United States of America"
+          ]
+        ],
+        "truncated": false
       }
     }
   ]
@@ -190,7 +312,8 @@ MATCH (n:Person)<-[r0:foundedBy]-(m0:Company {name: 'Global Market Insite'}),(n:
 The model requests `explode=true` for a list-valued property. The result contains
 the expected person and both expected citizenship values, but as two rows rather
 than one row containing a list. The recorded exact comparator rejects that
-shape. All three operations execute successfully; this is neither an unknown
+shape. All three operations execute successfully. The initial company handle h1 is not
+consumed by the intersection call, which restates its name. This is neither an unknown
 person nor an invalid tool call. It is evidence of representation sensitivity,
 not proof that the retrieved facts are false or the backend malfunctioned.
 

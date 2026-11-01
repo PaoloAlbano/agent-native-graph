@@ -157,7 +157,8 @@ make controlled-plan CONTROLLED_OUT=/tmp/ana-controlled-plan.json
 
 This records input/profile fingerprints and the proposed schedule, not launch
 approval. The [controlled protocol](docs/controlled-company-protocol.md#prepare-the-offline-plan)
-lists the remaining implementation gates; historical results stay unchanged.
+lists the remaining implementation gates. The current published ANA matrix is
+observational, not an execution of that controlled protocol.
 
 ## Preview or Build the Website
 

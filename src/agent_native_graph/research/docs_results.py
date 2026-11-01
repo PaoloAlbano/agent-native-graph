@@ -173,9 +173,10 @@ def evidence_summary(runs: list[dict[str, Any]]) -> str:
         "<p>Ranges span different temperature/reasoning configurations and any retained repeats. "
         "They are neither confidence intervals nor averages. Reasoning is a requested setting, "
         "not a guaranteed quality improvement; inspect each profile below.</p>"
-        "<p>Historical results are kept separate from opt-in shared-preflight diagnostics. "
-        "The latter verify the live graph and equal initial schema evidence, but are not "
-        "substituted for these archived runs or their historical baseline generations.</p></section>"
+        "<p>The current ANA matrix uses content-verified shared preflight and bounded-v1 "
+        "result handling. External baseline generations remain historical: matching their "
+        "saved queries to the same graph and evaluator does not align their original "
+        "schema prompts or generation budgets.</p></section>"
     )
 
 

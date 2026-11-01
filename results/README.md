@@ -18,8 +18,8 @@ cypherbench-company/
     summary.json
     failures.jsonl
     run.jsonl
-    run-config.json  # new runs; historical archives retain four files
-    graph-integrity.json  # only when before/after block verification is enabled
+    run-config.json  # sanitized launch provenance
+    graph-integrity.json  # present for every run in the current matrix
   query-reexecution/<evaluation_id>/
     manifest.json
     storage.json
@@ -29,7 +29,9 @@ cypherbench-company/
 
 ## Full ANA Runs
 
-Curate only complete Company runs with all **347 unique expected QIDs**.
+The current matrix contains twelve complete runs: three models times four
+profiles, using shared preflight and bounded-v1 result handling. It replaces the
+previous matrix in full. Curate only complete Company runs with all **347 unique expected QIDs**.
 The manifest identifies model, settings, benchmark, limit, source revision and
 checksums. The summary contains aggregate metrics; `failures.jsonl` contains
 non-matching cases, and `run.jsonl` preserves all per-question records.
@@ -57,7 +59,13 @@ outside this archive. The archiver preserves original temporary output.
 ## Derived Query Re-executions
 
 `query-reexecution/` stores complete evaluations of saved baseline Cypher,
-not new LLM runs. The evaluation manifest pins source traces, QIDs, graph
+not new LLM runs. The selected `current-ana-matrix` evaluation refreshes ANA
+scores and reuses the unchanged baseline/gold executions; its `ana_refresh`
+field pins the original evaluation manifest and checksum. It does not claim a
+new database execution. Historical evaluation folders remain as provenance,
+not additional current ANA runs.
+
+The evaluation manifest pins source traces, QIDs, graph
 fingerprints, scoring provenance and artifact checksums. Its logical JSONL files retain
 queries, returned rows, execution errors and exact-match verdicts.
 

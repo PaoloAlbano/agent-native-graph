@@ -6,7 +6,7 @@ expose different affordances: discovery, handles, bounded traversal, set
 composition, aggregation, pagination, and inspection.
 
 Agent-Native APIs are a proposal for that interface layer. On the Company case
-study, thirteen ANA runs obtain 62.5%-87.0% exact-result match over 347 questions.
+study, twelve ANA runs obtain 63.4%-87.9% exact-result match over 347 questions.
 On the pinned 100-question comparison, ANA has more exact matches than the
 corresponding saved-query baselines for GPT-OSS-120B and Qwen3.5-27B, but not
 uniformly for GPT-OSS-20B. Requested reasoning does not consistently improve

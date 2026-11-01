@@ -1,0 +1,143 @@
+{
+  "accuracy": 0.8703170028818443,
+  "avg_llm_calls": 5.083573487031701,
+  "avg_tool_calls": 5.083573487031701,
+  "executable_rate": 0.9884726224783862,
+  "failure_classes": {
+    "backend_timeout": 1,
+    "no_final_fetch_or_max_steps": 3,
+    "semantic_mismatch": 39,
+    "unbound_variable": 2
+  },
+  "failure_total": 45,
+  "llm_completion_tokens": 689349,
+  "llm_prompt_tokens": 42039990,
+  "llm_total_tokens": 42729339,
+  "matches": 302,
+  "ok": 343,
+  "request_accounting": {
+    "attempts_with_usage": 1764,
+    "attempts_without_usage": 0,
+    "failed_http_attempts": 0,
+    "failed_logical_calls": 0,
+    "finish_reasons": {
+      "stop": 1,
+      "tool_calls": 1763
+    },
+    "http_attempts": 1764,
+    "http_elapsed_s": 13400.442123376764,
+    "http_retry_attempts": 0,
+    "http_status_counts": {
+      "200": 1764
+    },
+    "instrumented_items": 347,
+    "logical_call_elapsed_s": 13451.538659227546,
+    "logical_calls": 1764,
+    "low_effort_http_attempts": 0,
+    "observed_completion_responses": 1764,
+    "observed_token_details_totals": {},
+    "observed_usage_totals": {
+      "completion_tokens": 689349,
+      "prompt_tokens": 42039990,
+      "total_tokens": 42729339
+    },
+    "pending_http_attempts": 0,
+    "pending_logical_calls": 0,
+    "requests_settled": true,
+    "roles": {
+      "agent": 1764
+    },
+    "schema_version": 1,
+    "uninstrumented_items": 0,
+    "usage_field_coverage": {
+      "completion_tokens": 1764,
+      "prompt_tokens": 1764,
+      "total_tokens": 1764
+    }
+  },
+  "run_id": "2026-10-31_openai-gpt-oss-120b_temp0_reasoning-none_tools-native_n347_openai--gpt-oss-120b_temp0-none-replacement",
+  "tool_errors": 34,
+  "top_tools": [
+    [
+      "fetch",
+      343
+    ],
+    [
+      "schema_overview",
+      333
+    ],
+    [
+      "entity_resolve",
+      226
+    ],
+    [
+      "expand",
+      204
+    ],
+    [
+      "pattern_query",
+      169
+    ],
+    [
+      "constraint_query",
+      89
+    ],
+    [
+      "project",
+      84
+    ],
+    [
+      "entity_set_operation",
+      58
+    ],
+    [
+      "schema_search",
+      39
+    ],
+    [
+      "value_search",
+      38
+    ],
+    [
+      "count_handle",
+      33
+    ],
+    [
+      "same_target_role_intersection",
+      30
+    ],
+    [
+      "optional_expand_count",
+      20
+    ],
+    [
+      "optional_count_by_pattern",
+      20
+    ],
+    [
+      "expand_aggregate",
+      14
+    ],
+    [
+      "group_handle",
+      9
+    ],
+    [
+      "top_entities_by_property",
+      9
+    ],
+    [
+      "compare",
+      7
+    ],
+    [
+      "shared_role_aggregate",
+      6
+    ],
+    [
+      "schema_describe_relationship",
+      5
+    ]
+  ],
+  "total": 347
+}

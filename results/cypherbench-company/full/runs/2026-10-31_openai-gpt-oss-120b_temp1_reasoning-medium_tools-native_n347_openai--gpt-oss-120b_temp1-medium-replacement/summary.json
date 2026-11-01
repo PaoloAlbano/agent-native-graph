@@ -1,0 +1,142 @@
+{
+  "accuracy": 0.861671469740634,
+  "avg_llm_calls": 5.282420749279539,
+  "avg_tool_calls": 5.270893371757925,
+  "executable_rate": 0.9769452449567724,
+  "failure_classes": {
+    "json_decode": 4,
+    "no_final_fetch_or_max_steps": 4,
+    "semantic_mismatch": 40
+  },
+  "failure_total": 48,
+  "llm_completion_tokens": 791234,
+  "llm_prompt_tokens": 43704025,
+  "llm_total_tokens": 44495259,
+  "matches": 299,
+  "ok": 339,
+  "request_accounting": {
+    "attempts_with_usage": 1833,
+    "attempts_without_usage": 0,
+    "failed_http_attempts": 0,
+    "failed_logical_calls": 0,
+    "finish_reasons": {
+      "stop": 9,
+      "tool_calls": 1824
+    },
+    "http_attempts": 1833,
+    "http_elapsed_s": 14489.595046333503,
+    "http_retry_attempts": 0,
+    "http_status_counts": {
+      "200": 1833
+    },
+    "instrumented_items": 347,
+    "logical_call_elapsed_s": 14546.131558665074,
+    "logical_calls": 1833,
+    "low_effort_http_attempts": 0,
+    "observed_completion_responses": 1833,
+    "observed_token_details_totals": {},
+    "observed_usage_totals": {
+      "completion_tokens": 793787,
+      "prompt_tokens": 43802475,
+      "total_tokens": 44596262
+    },
+    "pending_http_attempts": 0,
+    "pending_logical_calls": 0,
+    "requests_settled": true,
+    "roles": {
+      "agent": 1833
+    },
+    "schema_version": 1,
+    "uninstrumented_items": 0,
+    "usage_field_coverage": {
+      "completion_tokens": 1833,
+      "prompt_tokens": 1833,
+      "total_tokens": 1833
+    }
+  },
+  "run_id": "2026-10-31_openai-gpt-oss-120b_temp1_reasoning-medium_tools-native_n347_openai--gpt-oss-120b_temp1-medium-replacement",
+  "tool_errors": 31,
+  "top_tools": [
+    [
+      "fetch",
+      339
+    ],
+    [
+      "schema_overview",
+      332
+    ],
+    [
+      "entity_resolve",
+      240
+    ],
+    [
+      "expand",
+      237
+    ],
+    [
+      "pattern_query",
+      159
+    ],
+    [
+      "project",
+      100
+    ],
+    [
+      "constraint_query",
+      87
+    ],
+    [
+      "entity_set_operation",
+      53
+    ],
+    [
+      "schema_search",
+      41
+    ],
+    [
+      "value_search",
+      40
+    ],
+    [
+      "count_handle",
+      31
+    ],
+    [
+      "same_target_role_intersection",
+      30
+    ],
+    [
+      "optional_expand_count",
+      30
+    ],
+    [
+      "expand_aggregate",
+      27
+    ],
+    [
+      "optional_count_by_pattern",
+      11
+    ],
+    [
+      "filter",
+      11
+    ],
+    [
+      "group_handle",
+      10
+    ],
+    [
+      "compare",
+      8
+    ],
+    [
+      "summarize_handle",
+      7
+    ],
+    [
+      "top_entities_by_property",
+      6
+    ]
+  ],
+  "total": 347
+}

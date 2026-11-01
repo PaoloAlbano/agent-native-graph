@@ -67,6 +67,7 @@ from agent_native_graph.core.graph_utils import (
     _tool_value,
     _unique_query_var,
     _validate_filter_binding,
+    _validate_membership_operand,
     _validate_metric_binding,
 )
 from agent_native_graph.core.handle_store import HandleStore
@@ -1256,6 +1257,8 @@ class Neo4jGraphBackend(AgentGraphBackend):
                     "rel_ids": list(row.get("__rel_ids", [])),
                 }
             )
+        if limit is not None:
+            input_rows = input_rows[:limit]
         if not input_rows:
             columns = [str(item.get("alias") or item["property"]) for item in group_by]
             return self._store([], kind="table", columns=[*columns, alias])
@@ -1267,30 +1270,36 @@ class Neo4jGraphBackend(AgentGraphBackend):
             raise ValueError(f"Unsupported optional_expand_count direction: {direction}")
 
         count_expr = "count(DISTINCT t)" if distinct else "count(t)"
-        params = {"rows": input_rows}
-        query = (
-            "UNWIND $rows AS row "
-            + self._bound_match("s", "row.source_id")
-            + f"OPTIONAL MATCH {pattern} "
-        )
-        if exclude_traversed_relationships:
-            query += "WHERE r IS NULL OR NOT elementId(r) IN row.rel_ids "
-        query += f"RETURN row.row_index AS row_index, {count_expr} AS related_count "
-        query += _limit_clause(args, params)
-        counts_by_index: dict[int, int] = {row["row_index"]: 0 for row in input_rows}
+        source_identity = self._identity_expr("s")
+        params = {"source_ids": [row["source_id"] for row in input_rows]}
+        # Resolve source identities in one batch.
+        query = f"MATCH (s) WHERE {source_identity} IN $source_ids OPTIONAL MATCH {pattern} "
+        exclusions = [
+            {"source_id": row["source_id"], "rel_ids": row["rel_ids"]}
+            for row in input_rows
+            if exclude_traversed_relationships and row["rel_ids"]
+        ]
+        if exclusions:
+            params["excluded_relationships"] = exclusions
+            query += (
+                "WHERE r IS NULL OR NONE(excluded IN $excluded_relationships WHERE "
+                f"excluded.source_id = {source_identity} AND elementId(r) IN excluded.rel_ids) "
+            )
+        query += f"RETURN {source_identity} AS source_id, {count_expr} AS related_count"
+        counts_by_id = {row["source_id"]: 0 for row in input_rows}
         with self._session() as session:
             for record in self._run(session, query, **params):
-                counts_by_index[int(record["row_index"])] = int(record["related_count"] or 0)
+                counts_by_id[record["source_id"]] = int(record["related_count"] or 0)
 
         output: list[dict[str, Any]] = []
-        for input_row in input_rows if limit is None else input_rows[:limit]:
+        for input_row in input_rows:
             source_row = source_handle.rows[input_row["row_index"]]
             out: dict[str, Any] = {}
             for item in group_by:
                 out[str(item.get("alias") or item["property"])] = _row_property(
                     source_row, str(item["var"]), str(item["property"])
                 )
-            out[alias] = counts_by_index.get(input_row["row_index"], 0)
+            out[alias] = counts_by_id[input_row["source_id"]]
             output.append(out)
         columns = [str(item.get("alias") or item["property"]) for item in group_by]
         result = self._store(output, kind="table", columns=[*columns, alias])
@@ -1891,10 +1900,10 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 "Do not call constraint_query again for this question."
             )
 
-        limit = _int_arg(args, "limit", 1000, min_value=1)
         offset = _int_arg(args, "offset", 0, min_value=0)
         distinct = _bool_arg_default(args.get("distinct"), True)
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"offset": offset}
+        limit_clause = _limit_clause(args, params)
         query_parts = [f"MATCH ({find_var}:`{find_label}`)"]
         where_parts: list[str] = []
         used_vars = {find_var}
@@ -1981,7 +1990,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
             order_by = _safe_constraint_order_by(args, find_var, return_mode)
             if order_by:
                 query += f" ORDER BY {order_by}"
-            query += " SKIP $offset LIMIT $limit"
+            query += " SKIP $offset" + limit_clause
 
         output: list[dict[str, Any]] = []
         with self._session() as session:
@@ -2004,7 +2013,12 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 }
             }
         result = self._store(output, focus=focus, kind=kind, columns=columns, metadata=metadata)
-        if return_mode == "entities" and len(output) >= limit and not args.get("allow_large"):
+        if (
+            return_mode == "entities"
+            and "limit" in params
+            and len(output) >= params["limit"]
+            and not args.get("allow_large")
+        ):
             result["large_result_hint"] = (
                 "constraint_query returned at least the requested limit and may be capped. "
                 "If the question asks for a count or grouped count, prefer return_mode='count', "
@@ -2542,6 +2556,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 context="filter",
             )
         op = str(flt["op"])
+        _validate_membership_operand(op, flt.get("value"))
         value = _coerce_filter_value(flt.get("value"), flt.get("value_type"))
         if handle.rows and not any(var in row for row in handle.rows):
             raise ValueError(
@@ -2640,7 +2655,7 @@ class Neo4jGraphBackend(AgentGraphBackend):
         where_parts: list[str] = []
         params: dict[str, Any] = {"limit": limit}
         normalized_filters: list[dict[str, Any]] = []
-        for index, flt in enumerate(list(args.get("filters") or [])):
+        for flt in list(args.get("filters") or []):
             contexts = {
                 source_var: {"kind": "node", "label": source_label},
                 target_var: {"kind": "node", "label": target_label},
@@ -2651,9 +2666,6 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 context="same_target_role_intersection.filters",
             )
             normalized_filters.append(flt)
-            clause, clause_params = _cypher_filter_clause(flt, index)
-            where_parts.append(clause)
-            params.update(clause_params)
         rel_types = [str(rel.get("relationship_type")) for rel in relationships]
         repeated_same_relationship = len(set(rel_types)) < len(rel_types)
         target_multi_value_filters = [
@@ -2672,6 +2684,11 @@ class Neo4jGraphBackend(AgentGraphBackend):
                 "expand each target to the requested source entity type, then use entity_set_operation op='intersect' "
                 "on those source entity handles."
             )
+
+        for index, flt in enumerate(normalized_filters):
+            clause, clause_params = _cypher_filter_clause(flt, index)
+            where_parts.append(clause)
+            params.update(clause_params)
 
         select = list(args.get("select") or [])
         keep_entities = _bool_arg(args.get("keep_entities", False))
@@ -2807,7 +2824,9 @@ class Neo4jGraphBackend(AgentGraphBackend):
         return result
 
     def _shared_role_aggregate(self, args: dict[str, Any]) -> dict[str, Any]:
-        args = _normalize_aggregate_select_to_group_by(args)
+        args = dict(_normalize_aggregate_select_to_group_by(args))
+        # Resolve the default before choosing entity versus scalar DISTINCT semantics.
+        args["distinct"] = _bool_arg_default(args.get("distinct"), True)
         seed_label = _safe_name(str(args["seed_label"]))
         shared_label = _safe_name(str(args["shared_label"]))
         peer_label = _safe_name(str(args["peer_label"]))

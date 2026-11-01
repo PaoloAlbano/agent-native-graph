@@ -174,7 +174,9 @@ def test_example_preserves_the_archived_record_and_handle_previews():
         if "handle" in step["result"]
     }
     assert handles["h1"]["preview"] == ["Novo Nordisk (Germany)"]
-    assert handles["h2"]["preview"] == ["Novo Nordisk"]
-    assert handles["h3"]["preview"] == [{"name": "Novo Nordisk"}]
-    assert handles["h3"]["entity_variables"] == []
+    assert handles["h2"]["preview"] == []
+    assert handles["h2"]["matched_count"] == 0
+    assert handles["h3"]["preview"] == ["Novo Nordisk"]
+    assert handles["h4"]["preview"] == [{"name": "Novo Nordisk"}]
+    assert handles["h4"]["entity_variables"] == []
     assert "reasoning_content" not in original

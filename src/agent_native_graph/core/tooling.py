@@ -120,27 +120,39 @@ def registered_tool_specs(*, include_legacy: bool = False) -> list[dict[str, Any
 
 
 def call_registered_tool(backend: Any, name: str, args: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate arguments and invoke a registered tool."""
     definition = _TOOL_REGISTRY.get(name)
     if definition is None or definition.function is None:
         return None
+    if not isinstance(args, dict):
+        raise ValueError(f"{name} arguments must be an object. No operation was executed.")
+    allowed = set(definition.parameters) | set(definition.argument_aliases.values())
+    unknown = set(args) - allowed
+    if unknown:
+        names = ", ".join(repr(parameter) for parameter in sorted(unknown, key=repr))
+        public_names = ", ".join(sorted(definition.parameters)) or "(none)"
+        raise ValueError(
+            f"{name}: unsupported parameter(s): {names}. "
+            f"Allowed parameters: {public_names}. No operation was executed."
+        )
+    kwargs = {}
+    supplied_names = {}
+    for arg_name, value in args.items():
+        parameter_name = definition.argument_aliases.get(arg_name, arg_name)
+        if parameter_name in kwargs:
+            raise ValueError(
+                f"{name}: conflicting arguments {supplied_names[parameter_name]!r} and "
+                f"{arg_name!r} refer to the same parameter. "
+                "Supply it only once. No operation was executed."
+            )
+        kwargs[parameter_name] = value
+        supplied_names[parameter_name] = arg_name
     signature = inspect.signature(definition.function)
     accepted_parameters = {
         parameter_name
         for parameter_name in signature.parameters
         if parameter_name not in {"self", "cls", "backend"}
     }
-    accepts_extra_kwargs = any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in signature.parameters.values()
-    )
-    kwargs = {
-        definition.argument_aliases.get(arg_name, arg_name): value
-        for arg_name, value in args.items()
-    }
-    if not accepts_extra_kwargs:
-        kwargs = {
-            arg_name: value for arg_name, value in kwargs.items() if arg_name in accepted_parameters
-        }
     try:
         return definition.function(backend, **kwargs)
     except TypeError as exc:

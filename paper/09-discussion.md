@@ -1,8 +1,9 @@
 # 9. Discussion
 
 The GPT-OSS-20B matrix is a counterexample to a uniform interface advantage.
-Under the common exact-result comparator, ANA loses to both historical query
-baselines at T0/none and beats both at T1/none; other profiles split or tie.
+Under the common exact-result comparator, ANA beats both historical query
+baselines at T0/medium, beats direct and ties multi-agent at T0/none, and lies
+between them at both T1 profiles.
 This motivates studying model-interface compatibility rather than claiming
 that tool decomposition necessarily improves every model. Historical baseline
 generation conditions remain unmatched, so neither the gains nor the losses

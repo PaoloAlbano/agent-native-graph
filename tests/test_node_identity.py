@@ -197,6 +197,55 @@ def test_deletion_invalidates_even_cached_fetch_and_never_rebinds(graph):
     session.begin_transaction.assert_called_once()
 
 
+@pytest.mark.parametrize("delete_after", [False, True])
+def test_optional_expand_batch_uses_workflow_identity_and_keeps_stale_checks(
+    graph, monkeypatch, delete_after
+):
+    g, tx, _, _ = graph
+    g._schema["relationship_types"] = ["LINK"]
+    for node in tx.nodes:
+        node["name"] = "Same name"
+    source = scan(g)
+    original_run = tx.run
+
+    def run(query, **params):
+        if "AS related_count" in query:
+            tx.queries.append((query, params))
+            assert "MATCH (s) WHERE elementId(s) IN $source_ids" in query
+            assert "RETURN elementId(s) AS source_id" in query and "s.id" not in query
+            assert params["source_ids"] == ["node-1", "node-2", "node-3"]
+            return [
+                {"source_id": "node-2", "related_count": 1},
+                {"source_id": "node-1", "related_count": 2},
+                {"source_id": "node-3", "related_count": 0},
+            ]
+        return original_run(query, **params)
+
+    monkeypatch.setattr(tx, "run", run)
+    result = g.call(
+        "optional_expand_count",
+        {
+            "from": source["handle"],
+            "source": "d",
+            "relationship_type": "LINK",
+            "target_label": "Device",
+            "direction": "out",
+            "alias": "total",
+        },
+    )
+    if delete_after:
+        tx.alive.remove("node-1")
+        with pytest.raises(identity.StaleWorkflowError, match="deleted"):
+            g.call("fetch", {"from": result["handle"]})
+        assert not g._handles and tx.closed()
+    else:
+        assert g.call("fetch", {"from": result["handle"]})["rows"] == [
+            ["Same name", 2],
+            ["Same name", 1],
+            ["Same name", 0],
+        ]
+
+
 def test_timeout_is_terminal_and_does_not_open_another_transaction(graph, monkeypatch):
     g, tx, _, _ = graph
     monkeypatch.setattr(identity.time, "monotonic", lambda: 1)
