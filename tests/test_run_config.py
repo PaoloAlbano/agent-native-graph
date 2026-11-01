@@ -220,7 +220,7 @@ def test_profile_matrix_reaches_http_metadata_archive_and_site(experiment, monke
         neo4j_benchmark.main()
     graph_check.assert_called_once()
     assert len(requests) == len(tasks) == 347
-    assert timeouts == [expected["timeout_s"]] * len(tasks)
+    assert timeouts == [expected["timeout_s"]]
     for payload in requests:
         assert payload["tools"] == specs
         assert payload["model"] == "test/model"

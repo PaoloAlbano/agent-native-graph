@@ -138,18 +138,19 @@ def test_fallback_failure_retains_usage_from_every_discarded_initial_response(pr
     assert summary["http_status_counts"] == {"200": 3, "429": 1}
 
 
-@pytest.mark.parametrize("status", [429, 500, 401])
-def test_exhausted_http_errors_are_observed_without_changing_existing_retry_policy(
-    provider, transport, status
-):
+@pytest.mark.parametrize("status,attempts", [(429, 2), (500, 2), (401, 1)])
+def test_exhausted_http_errors_retain_accounting(provider, transport, status, attempts):
     with transport(lambda req: httpx.Response(status)), account_requests() as ledger:
         with pytest.raises(httpx.HTTPStatusError):
             provider(max_attempts=2).chat([])
     summary = ledger.snapshot()["summary"]
-    assert summary["http_attempts"] == 2 and summary["failed_logical_calls"] == 1
-    assert summary["failed_http_attempts"] == 2 and summary["http_retry_attempts"] == 1
+    assert summary["http_attempts"] == attempts and summary["failed_logical_calls"] == 1
+    assert (
+        summary["failed_http_attempts"] == attempts
+        and summary["http_retry_attempts"] == attempts - 1
+    )
     assert summary["observed_usage_totals"] == {} and summary["usage_field_coverage"] == {}
-    assert summary["attempts_without_usage"] == 2 and summary["requests_settled"]
+    assert summary["attempts_without_usage"] == attempts and summary["requests_settled"]
 
 
 def test_timeout_then_success_and_unknown_usage(provider, transport):

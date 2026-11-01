@@ -299,20 +299,22 @@ def _execute(args, tasks: list[dict], schema: dict) -> None:
     shared = getattr(args, "shared_preflight_artifact", None)
     if shared is not None:
         common_kwargs.update(schema_bootstrap=shared["schema_prompt"], database=shared["database"])
-    if args.concurrency <= 1:
-        for task in pending_tasks:
-            row = _run_agent_task(task, **common_kwargs)
-            append_jsonl(args.out, row)
-            _update_summary(summary, row)
-    else:
-        with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-            futures = [
-                executor.submit(_run_agent_task, task, **common_kwargs) for task in pending_tasks
-            ]
-            for future in as_completed(futures):
-                row = future.result()
+    with llm:
+        if args.concurrency <= 1:
+            for task in pending_tasks:
+                row = _run_agent_task(task, **common_kwargs)
                 append_jsonl(args.out, row)
                 _update_summary(summary, row)
+        else:
+            with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+                futures = [
+                    executor.submit(_run_agent_task, task, **common_kwargs)
+                    for task in pending_tasks
+                ]
+                for future in as_completed(futures):
+                    row = future.result()
+                    append_jsonl(args.out, row)
+                    _update_summary(summary, row)
     if summary["total"]:
         summary["avg_tool_calls"] = summary["tool_calls"] / summary["total"]
         summary["avg_llm_calls"] = summary["llm_calls"] / summary["total"]

@@ -121,6 +121,16 @@ def classify_failure(row: dict[str, Any]) -> str | None:
         return "task_timeout"
     if "jsondecodeerror" in combined:
         return "json_decode"
+    if any(
+        kind in error.lower()
+        for kind in ("readtimeout:", "connecttimeout:", "writetimeout:", "pooltimeout:")
+    ):
+        return "llm_timeout"
+    if any(
+        kind in error.lower()
+        for kind in ("connecterror:", "remoteprotocolerror:", "httpstatuserror:")
+    ):
+        return "llm_transport_error"
     if "transactiontimedout" in combined or "timeout" in combined:
         return "backend_timeout"
     if "unknown handle" in combined:

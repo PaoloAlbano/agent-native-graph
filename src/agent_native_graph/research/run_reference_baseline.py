@@ -591,15 +591,16 @@ async def _run_with_reference(args: argparse.Namespace, provenance: dict) -> Non
                     api_key_file=args.api_key_file,
                     settings=LLMCallSettings(**profile_settings),
                 )
-                runner = build_profile_runner(
-                    args.mode,
-                    settings,
-                    graph_client,
-                    provider,
-                    logger,
-                    **({"policy": policy} if policy else {}),
-                )
-                await run_all(runner)
+                async with provider:
+                    runner = build_profile_runner(
+                        args.mode,
+                        settings,
+                        graph_client,
+                        provider,
+                        logger,
+                        **({"policy": policy} if policy else {}),
+                    )
+                    await run_all(runner)
             elif args.mode == "agentic":
                 async with build_pipeline(settings, graph_client, call_logger=logger) as runner:
                     await run_all(runner)
