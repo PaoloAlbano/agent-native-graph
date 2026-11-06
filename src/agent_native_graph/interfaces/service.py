@@ -160,6 +160,7 @@ def create_app(
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Could not open workflow session") from exc
         response.headers["Cache-Control"] = "no-store"
+        response.headers["X-ANA-Session"] = token
         return {"session_id": token, "idle_timeout_s": config.idle_timeout_s}
 
     @app.delete("/sessions/current", status_code=204)
@@ -175,7 +176,9 @@ def create_app(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Session cleanup failed") from exc
-        return Response(status_code=204)
+        return Response(
+            status_code=204, headers={"X-ANA-Session": session_id, "Cache-Control": "no-store"}
+        )
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -215,6 +218,7 @@ def create_app(
     @app.post("/tools/call")
     def call_tool(
         request: ToolCallRequest,
+        response: Response,
         principal: Annotated[Principal, Depends(authenticate)],
         session_id: str | None = Header(default=None, alias="X-ANA-Session"),
     ) -> dict[str, Any]:
@@ -229,7 +233,13 @@ def create_app(
         except SessionNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 - service boundary turns backend errors into JSON.
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+                headers={"X-ANA-Session": session_id, "Cache-Control": "no-store"},
+            ) from exc
+        response.headers["X-ANA-Session"] = session_id
+        response.headers["Cache-Control"] = "no-store"
         return {"tool": request.tool, "result": result}
 
     return app

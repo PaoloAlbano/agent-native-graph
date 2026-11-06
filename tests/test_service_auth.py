@@ -107,6 +107,7 @@ def test_http_auth_owner_and_tool_permissions(monkeypatch):
                     )
                     assert response.status_code == 401
                     assert response.headers["www-authenticate"] == "Bearer"
+                    assert "x-ana-session" not in response.headers
                 assert not backends
                 assert (
                     await client.post("/sessions", headers={"Authorization": "Bearer wrong"})
@@ -122,18 +123,32 @@ def test_http_auth_owner_and_tool_permissions(monkeypatch):
                         item.get("name", item.get("function", {}).get("name")) == "count_nodes"
                         for item in data
                     )
-                token = (await client.post("/sessions", headers=reader)).json()["session_id"]
+                created = await client.post("/sessions", headers=reader)
+                assert created.status_code == 201
+                token = created.json()["session_id"]
+                assert created.headers["x-ana-session"] == token
+                assert created.headers["cache-control"] == "no-store"
                 owned = {**reader, "X-ANA-Session": token}
                 stolen = {**writer, "X-ANA-Session": token}
                 payload = {"tool": "fetch", "args": {}}
-                assert (
-                    await client.post("/tools/call", headers=stolen, json=payload)
-                ).status_code == 404
-                assert (await client.delete("/sessions/current", headers=stolen)).status_code == 404
+                foreign_call = await client.post("/tools/call", headers=stolen, json=payload)
+                foreign_delete = await client.delete("/sessions/current", headers=stolen)
+                for response in (foreign_call, foreign_delete):
+                    assert response.status_code == 404
+                    assert "x-ana-session" not in response.headers
                 backends[0].call.assert_not_called()
-                assert (
-                    await client.post("/tools/call", headers=owned, json=payload)
-                ).status_code == 200
+
+                called = await client.post("/tools/call", headers=owned, json=payload)
+                assert called.status_code == 200
+                assert called.headers["x-ana-session"] == token
+                assert called.headers["cache-control"] == "no-store"
+
+                backends[0].call.side_effect = ValueError("Unknown handle")
+                failed = await client.post("/tools/call", headers=owned, json=payload)
+                assert failed.status_code == 400
+                assert failed.headers["x-ana-session"] == token
+                assert failed.headers["cache-control"] == "no-store"
+                backends[0].call.side_effect = None
                 for name in ("count_nodes", "_query", "unknown"):
                     response = await client.post(
                         "/tools/call?profile=readwrite",
@@ -141,6 +156,7 @@ def test_http_auth_owner_and_tool_permissions(monkeypatch):
                         json={"tool": name, "args": {"profile": "readwrite"}},
                     )
                     assert response.status_code == 403
+                    assert "x-ana-session" not in response.headers
                 writer_token = (await client.post("/sessions", headers=writer)).json()["session_id"]
                 assert (
                     await client.post(
@@ -149,7 +165,13 @@ def test_http_auth_owner_and_tool_permissions(monkeypatch):
                         json={"tool": "count_nodes", "args": {}},
                     )
                 ).status_code == 200
-                assert (await client.delete("/sessions/current", headers=owned)).status_code == 204
+                deleted = await client.delete("/sessions/current", headers=owned)
+                assert deleted.status_code == 204
+                assert deleted.headers["x-ana-session"] == token
+                assert deleted.headers["cache-control"] == "no-store"
+                expired = await client.post("/tools/call", headers=owned, json=payload)
+                assert expired.status_code == 404
+                assert "x-ana-session" not in expired.headers
 
     asyncio.run(requests())
 
