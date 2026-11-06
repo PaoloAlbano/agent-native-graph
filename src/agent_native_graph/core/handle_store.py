@@ -17,16 +17,25 @@ from agent_native_graph.domain.handles import Handle
 class HandleStore:
     """Owns intermediate handles and their lineage across tool calls."""
 
-    def __init__(self, *, namespace: str | None = None) -> None:
+    def __init__(self, *, namespace: str | None = None, compact_ids: bool = False) -> None:
+        if type(compact_ids) is not bool:
+            raise ValueError("compact_ids must be a boolean")
         self.namespace = namespace
+        self.compact_ids = compact_ids
         self.handles: dict[str, Handle] = {}
         self.lineage: dict[str, list[dict[str, Any]]] = {}
         self.counter = 0
 
     @classmethod
-    def isolated(cls) -> "HandleStore":
-        """Create an opaque workflow namespace; the plain constructor retains legacy IDs."""
-        return cls(namespace=uuid4().hex)
+    def isolated(cls, *, compact_ids: bool = True) -> "HandleStore":
+        """Create a private workflow namespace with compact, session-local IDs."""
+        return cls(namespace=uuid4().hex, compact_ids=compact_ids)
+
+    def use_compact_ids(self) -> None:
+        """Select compact IDs before the first handle is created; keep ownership separate."""
+        if self.counter or self.handles or self.lineage:
+            raise ValueError("Handle formatting must be selected before creating handles")
+        self.compact_ids = True
 
     def store(
         self,
@@ -40,7 +49,11 @@ class HandleStore:
         """Store rows and return the public descriptor given back to the agent."""
 
         self.counter += 1
-        handle_id = f"h{self.namespace}-{self.counter}" if self.namespace else f"h{self.counter}"
+        handle_id = (
+            f"h{self.counter}"
+            if self.compact_ids or not self.namespace
+            else f"h{self.namespace}-{self.counter}"
+        )
         handle = Handle(
             id=handle_id,
             rows=rows,
@@ -139,9 +152,9 @@ class HandleStore:
         self.lineage[handle_id] = lineage[-24:]
 
     def available_summaries(self) -> list[dict[str, Any]]:
-        """Return compact descriptors for every known handle."""
+        """Return compact descriptors in creation order, including counters beyond h9."""
 
-        return [self.summary(handle_id) for handle_id in sorted(self.handles)]
+        return [self.summary(handle_id) for handle_id in self.handles]
 
     def summary(self, handle_id: str) -> dict[str, Any]:
         """Return a compact descriptor for one handle."""

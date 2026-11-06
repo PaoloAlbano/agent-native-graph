@@ -41,10 +41,10 @@ def test_sessions_isolate_handles_even_after_each_has_created_its_first_handle()
     a, b = sessions.create(), sessions.create()
     ha = sessions.call(a, "make", {"value": "A"})["handle"]
     hb = sessions.call(b, "make", {"value": "B"})["handle"]
-    assert ha != hb
+    assert ha == hb == "h1"
+    assert created[0][1].namespace != created[1][1].namespace
     assert sessions.call(a, "fetch", {"from": ha})["rows"] == [{"value": "A"}]
-    with pytest.raises(ValueError, match="Unknown handle"):
-        sessions.call(b, "fetch", {"from": ha})
+    assert sessions.call(b, "fetch", {"from": ha})["rows"] == [{"value": "B"}]
     sessions.delete(a)
     assert not created[0][1].handles
     assert sessions.call(b, "fetch", {"from": hb})["rows"] == [{"value": "B"}]
@@ -270,8 +270,12 @@ def test_http_sessions_are_app_local_and_shutdown_closes_remaining_backends(
                     "/tools/call", json={"tool": "make", "args": {"value": 1}}
                 )
                 assert missing.status_code == 401
-                a = (await client.post("/sessions")).json()["session_id"]
-                b = (await client.post("/sessions")).json()["session_id"]
+                created_a = await client.post("/sessions")
+                a = created_a.json()["session_id"]
+                assert created_a.headers["x-ana-session"] == a
+                created_b = await client.post("/sessions")
+                b = created_b.json()["session_id"]
+                assert created_b.headers["x-ana-session"] == b
                 assert (await client.post("/sessions")).status_code == 429
 
                 async def call(token, tool, args):
@@ -283,8 +287,12 @@ def test_http_sessions_are_app_local_and_shutdown_closes_remaining_backends(
 
                 ha = (await call(a, "count_nodes", {"value": "A"})).json()["result"]["handle"]
                 hb = (await call(b, "count_nodes", {"value": "B"})).json()["result"]["handle"]
-                assert ha != hb
-                assert (await call(b, "fetch", {"from": ha})).status_code == 400
+                assert ha == hb == "h1"
+                own = await call(b, "fetch", {"from": ha})
+                assert own.status_code == 200
+                assert own.headers["x-ana-session"] == b
+                assert own.headers["cache-control"] == "no-store"
+                assert own.json()["result"]["rows"] == [{"value": "B"}]
                 assert (await call(a, "fetch", {"from": ha})).status_code == 200
                 foreign = await peer.post(
                     "/tools/call",

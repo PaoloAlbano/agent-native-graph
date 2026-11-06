@@ -2,11 +2,13 @@
 
 from agent_native_graph.backends.neo4j.connection import connect_neo4j
 from agent_native_graph.core.backend import AgentGraphBackend
+from agent_native_graph.core.runtime import SharedGraphBackend
 from agent_native_graph.core.tool_contract import ToolContract, get_tool_contract
 from agent_native_graph.core.tool_specs import get_tool_specs
 
 __all__ = [
     "AgentGraphBackend",
+    "SharedGraphBackend",
     "ToolContract",
     "__version__",
     "connect_neo4j",
@@ -14,4 +16,4 @@ __all__ = [
     "get_tool_specs",
 ]
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"

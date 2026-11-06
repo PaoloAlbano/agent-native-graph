@@ -394,16 +394,17 @@ def http(transaction=False):
         second_count = client.post(
             "/tools/call",
             headers=headers[1],
-            json={"tool": "count_nodes", "args": {"label": "Device"}},
+            json={"tool": "count_nodes", "args": {"label": "Zone"}},
         )
         second_count.raise_for_status()
-        assert first_handle != second_count.json()["result"]["handle"]
-        foreign_first = client.post(
+        assert first_handle == second_count.json()["result"]["handle"] == "h1"
+        own_first = client.post(
             "/tools/call",
             headers=headers[1],
             json={"tool": "fetch", "args": {"from": first_handle}},
         )
-        assert foreign_first.status_code == 400 and "Unknown handle" in foreign_first.text
+        assert own_first.status_code == 200
+        assert own_first.json()["result"]["rows"] == [[2]]
         report = exercise(call)
         assert client.post("/sessions", headers=credentials[0]).status_code == 429
         handle = call("count_nodes", {"label": "Device"})["handle"]

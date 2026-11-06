@@ -67,7 +67,7 @@ def test_environment_config_is_an_immutable_snapshot_without_credentials_in_repr
     assert "not-public" not in repr(config) and "private-host" not in repr(config)
 
 
-def test_public_factory_handles_are_not_confused_between_workflows(monkeypatch):
+def test_public_factory_short_handles_resolve_in_their_workflow_store(monkeypatch):
     monkeypatch.setattr(
         backend.GraphDatabase, "driver", MagicMock(side_effect=[MagicMock(), MagicMock()])
     )
@@ -77,6 +77,7 @@ def test_public_factory_handles_are_not_confused_between_workflows(monkeypatch):
     ):
         ha = a._store([{"value": "A"}], kind="table", columns=["value"])["handle"]
         hb = b._store([{"value": "B"}], kind="table", columns=["value"])["handle"]
-        assert ha != hb
-        with pytest.raises(ValueError, match="Unknown handle"):
-            b.call("fetch", {"from": ha})
+        assert ha == hb == "h1"
+        assert a._handle_store.namespace != b._handle_store.namespace
+        assert a.call("fetch", {"from": ha})["rows"] == [["A"]]
+        assert b.call("fetch", {"from": hb})["rows"] == [["B"]]

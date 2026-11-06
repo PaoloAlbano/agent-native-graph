@@ -160,9 +160,12 @@ One backend owns the handles for one workflow. Reuse it for successive calls
 and pass returned handles rather than guessing IDs. A handle from another
 backend/process is not transferable. Do not share a backend concurrently across
 untrusted users. Handles are in memory, not persisted cursors. Public factory
-workflows use independent opaque handle namespaces; do not infer handle IDs or
-transfer them to another workflow. Direct low-level construction retains the
-historical local IDs for benchmark compatibility. Python workflows have no idle
+workflows retain independent internal namespaces and return short local names
+such as `h1` and `h2`. Two workflows can both return `h1` for different results;
+clients must retain the workflow context together with the handle. Do not infer
+future IDs or transfer a bare handle between workflows. Direct low-level
+construction retains its historical format. `HandleStore.isolated(compact_ids=False)`
+is available when a caller explicitly needs the older namespaced format. Python workflows have no idle
 expiry; close them when finished. HTTP lifecycle limits are described below.
 
 ### Fetch Page Contract
@@ -329,6 +332,12 @@ apply at HTTP boundaries; the trusted Python library does not require an API
 key. All sessions still use the app's configured backend credentials/database:
 no graph-row/tenant-specific permissions are imposed by client IDs.
 
+Session creation returns `X-ANA-Session` in the response as well as `session_id`
+in the JSON body. Successful tool calls and deletion echo the header with
+`Cache-Control: no-store`. Tool errors echo it after ownership validation;
+authentication and unknown/foreign-session errors do not confirm it. A deletion
+response identifies the workflow that was closed, not an active token.
+
 The server serializes calls within a session; different sessions can execute
 concurrently. Deletion waits for the in-flight operation, clears handles and
 closes the owned backend. App shutdown drains backends, including concurrent
@@ -461,3 +470,16 @@ assuming arbitrary-graph compatibility.
 For code and evidence contributions, follow [CONTRIBUTING.md](../CONTRIBUTING.md).
 Shared logic belongs behind the same backend/tool contract for Python, CLI and
 HTTP, not in a separate implementation for each transport.
+
+## Implementing Another Graph Backend
+
+`SharedGraphBackend`, exported from the package root and `core.runtime`, holds
+engine-neutral schema discovery, planning, handle composition, projection,
+aggregation and fetch behavior. Concrete adapters implement graph reads,
+`_label_counts`, `_node_property_samples` and `_relationship_property_samples`,
+plus the lifecycle/dispatch contract inherited from `AgentGraphBackend`.
+Schema helpers in `core.schema_runtime` use those hooks and contain no database
+queries. The Neo4j adapter extends this runtime and keeps its driver, queries,
+transaction identity and server-side count optimizations in `backends.neo4j`.
+Other adapters can reuse the runtime without inheriting a concrete database
+backend. Tool schemas and the `ana-v0`/`ana-fetch-v1` envelopes are unchanged.

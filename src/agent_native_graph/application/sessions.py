@@ -65,8 +65,8 @@ class _Session:
 class BackendSessions:
     """Own backend instances, serialize each workflow and drain them on shutdown.
 
-    Factories must use the supplied store; its namespace prevents local handle
-    names from resolving in another session. The transport supplies a trusted
+    Factories must use the supplied store. Handle names are local to each
+    session; namespaces keep internal entity ownership independent of compact IDs. The transport supplies a trusted
     owner ID after authentication; the registry checks it alongside the workflow
     token. Tokens alone are not authentication. Idle expiry is checked on requests, not by a background
     reaper. State is process-local and unsuitable for uncoordinated workers.
