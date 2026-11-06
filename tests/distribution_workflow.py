@@ -371,7 +371,9 @@ def http(transaction=False):
         for headers in credentials:
             response = client.post("/sessions", headers=headers)
             response.raise_for_status()
-            tokens.append(response.json()["session_id"])
+            token = response.json()["session_id"]
+            assert response.headers["x-ana-session"] == token
+            tokens.append(token)
         headers = [
             cred | {"X-ANA-Session": token} for cred, token in zip(credentials, tokens, strict=True)
         ]
@@ -381,6 +383,7 @@ def http(transaction=False):
                 "/tools/call", headers=headers[0], json={"tool": tool, "args": args}
             )
             response.raise_for_status()
+            assert response.headers["x-ana-session"] == tokens[0]
             return response.json()["result"]
 
         if transaction:
@@ -394,16 +397,26 @@ def http(transaction=False):
         second_count = client.post(
             "/tools/call",
             headers=headers[1],
-            json={"tool": "count_nodes", "args": {"label": "Device"}},
+            json={"tool": "count_nodes", "args": {"label": "Zone"}},
         )
         second_count.raise_for_status()
-        assert first_handle != second_count.json()["result"]["handle"]
+        assert second_count.headers["x-ana-session"] == tokens[1]
+        second_handle = second_count.json()["result"]["handle"]
+        assert first_handle != second_handle
+        second_fetch = client.post(
+            "/tools/call",
+            headers=headers[1],
+            json={"tool": "fetch", "args": {"from": second_handle}},
+        )
+        second_fetch.raise_for_status()
+        assert second_fetch.json()["result"]["rows"] == [[2]]
         foreign_first = client.post(
             "/tools/call",
             headers=headers[1],
             json={"tool": "fetch", "args": {"from": first_handle}},
         )
         assert foreign_first.status_code == 400 and "Unknown handle" in foreign_first.text
+        assert foreign_first.headers["x-ana-session"] == tokens[1]
         report = exercise(call)
         assert client.post("/sessions", headers=credentials[0]).status_code == 429
         handle = call("count_nodes", {"label": "Device"})["handle"]
@@ -411,7 +424,9 @@ def http(transaction=False):
         foreign = client.post("/tools/call", headers=headers[1], json=payload)
         assert foreign.status_code == 400 and "Unknown handle" in foreign.text
         stolen = credentials[1] | {"X-ANA-Session": tokens[0]}
-        assert client.post("/tools/call", headers=stolen, json=payload).status_code == 404
+        stolen_call = client.post("/tools/call", headers=stolen, json=payload)
+        assert stolen_call.status_code == 404
+        assert "x-ana-session" not in stolen_call.headers
         assert client.delete("/sessions/current", headers=stolen).status_code == 404
         assert call("fetch", {"from": handle})["rows"] == [[25]]
         invalid = client.post(
@@ -419,7 +434,9 @@ def http(transaction=False):
         )
         assert invalid.status_code == 400
         for session_headers in headers:
-            assert client.delete("/sessions/current", headers=session_headers).status_code == 204
+            deleted = client.delete("/sessions/current", headers=session_headers)
+            assert deleted.status_code == 204
+            assert deleted.headers["x-ana-session"] == session_headers["X-ANA-Session"]
             assert (
                 client.post("/tools/call", headers=session_headers, json=payload).status_code == 404
             )
