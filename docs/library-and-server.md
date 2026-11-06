@@ -329,6 +329,12 @@ apply at HTTP boundaries; the trusted Python library does not require an API
 key. All sessions still use the app's configured backend credentials/database:
 no graph-row/tenant-specific permissions are imposed by client IDs.
 
+Session creation returns `X-ANA-Session` in the response as well as `session_id`
+in the JSON body. Successful tool calls and deletion echo the header with
+`Cache-Control: no-store`. Tool errors echo it after ownership validation;
+authentication and unknown/foreign-session errors do not confirm it. A deletion
+response identifies the workflow that was closed, not an active token.
+
 The server serializes calls within a session; different sessions can execute
 concurrently. Deletion waits for the in-flight operation, clears handles and
 closes the owned backend. App shutdown drains backends, including concurrent
